@@ -30,6 +30,16 @@ public class SysRoleServiceImpl extends BaseServiceImpl<SysRoleDao, SysRole> imp
     }
 
     @Override
+    public SysRole getRoleByKey(String roleKey) {
+        if (roleKey == null || roleKey.trim().isEmpty()) {
+            return null;
+        }
+        return getMapper().selectOneByQuery(QueryWrapper.create()
+                .where(SYS_ROLE.ROLE_KEY.eq(roleKey))
+                .and(SYS_ROLE.SYS005.eq(1)));
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public void assignResources(Long roleId, List<Long> resourceIds) {
         getMapper().deleteRoleResourceByRoleId(roleId);

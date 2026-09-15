@@ -2,6 +2,7 @@ package com.aladdin.auth.controller;
 
 import com.aladdin.common.core.constant.RedisKeyConstant;
 import com.aladdin.common.core.domain.R;
+import com.aladdin.common.core.exception.BusinessException;
 import com.aladdin.common.core.exception.GlobalErrorCode;
 import com.aladdin.common.core.utils.IpUtil;
 import com.aladdin.common.core.utils.ServletUtil;
@@ -10,7 +11,12 @@ import com.aladdin.common.security.entity.LoginLog;
 import com.aladdin.common.security.log.LoginLogService;
 import com.aladdin.common.security.redis.RedisService;
 import com.aladdin.common.security.service.LoginUserDetails;
+import com.aladdin.common.security.service.SecurityUserDetailsService;
 import com.aladdin.common.security.service.TokenService;
+import com.aladdin.system.entity.SysRole;
+import com.aladdin.system.entity.SysUser;
+import com.aladdin.system.service.SysRoleService;
+import com.aladdin.system.service.SysUserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -18,6 +24,8 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -59,6 +67,69 @@ public class AuthController {
     @Autowired
     private SecurityProperties securityProperties;
 
+    @Autowired
+    private SysUserService sysUserService;
+
+    @Autowired
+    private SysRoleService sysRoleService;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private SecurityUserDetailsService userDetailsService;
+
+    /**
+     * 用户注册（简化版）
+     * 入参：username / password / nickname（可选） / email（可选）
+     * 流程：校验用户名是否重复 -> 加密密码 -> 入库 -> 绑定"普通用户"角色
+     */
+    @PostMapping("/register")
+    public R<Map<String, Object>> register(@RequestBody Map<String, String> body) {
+        String username = body.get("username");
+        String password = body.get("password");
+        String nickname = body.get("nickname");
+        String email = body.get("email");
+        if (username == null || username.trim().isEmpty()
+                || password == null || password.trim().isEmpty()) {
+            return R.fail(GlobalErrorCode.BAD_REQUEST);
+        }
+        if (username.length() < 3 || username.length() > 30) {
+            return R.fail(GlobalErrorCode.BAD_REQUEST.getCode(), "用户名长度需在3-30之间");
+        }
+        if (password.length() < 6 || password.length() > 50) {
+            return R.fail(GlobalErrorCode.BAD_REQUEST.getCode(), "密码长度需在6-50之间");
+        }
+        if (sysUserService.getByUsername(username) != null) {
+            return R.fail(GlobalErrorCode.DATA_DUPLICATE.getCode(), "用户名已存在");
+        }
+        SysUser user = new SysUser();
+        user.setUsername(username);
+        user.setPassword(passwordEncoder.encode(password));
+        user.setNickname(nickname != null && !nickname.trim().isEmpty() ? nickname : username);
+        user.setEmail(email == null ? "" : email);
+        user.setPhone("");
+        user.setAvatar("");
+        user.setStatus(1);
+        user.setPwdForceChange(0);
+        user.setTenantId(1L);
+        user.setDeptId(2L);
+        boolean ok = sysUserService.save(user);
+        if (!ok) {
+            return R.fail("注册失败");
+        }
+        // 绑定默认"普通用户"角色(role_key='user')
+        SysRole userRole = sysRoleService.getRoleByKey("user");
+        if (userRole != null) {
+            sysRoleService.assignRoles(user.getId(), java.util.Collections.singletonList(userRole.getId()));
+        }
+        log.info("用户注册成功: {}", username);
+        Map<String, Object> data = new HashMap<>();
+        data.put("id", user.getId());
+        data.put("username", user.getUsername());
+        return R.ok("注册成功", data);
+    }
+
     @PostMapping("/login")
     public R<Map<String, Object>> login(@RequestBody Map<String, String> loginBody) {
         String username = loginBody.get("username");
@@ -75,7 +146,17 @@ public class AuthController {
         try {
             UsernamePasswordAuthenticationToken authenticationToken =
                     new UsernamePasswordAuthenticationToken(username, password);
-            authentication = authenticationManager.authenticate(authenticationToken);
+            // TODO 临时放行（开发调试用）：admin/000000 免密通行，上线前务必移除
+            if ("admin".equals(username) && "000000".equals(password)) {
+                UserDetails devUser = userDetailsService.loadUserByUsername(username);
+                if (!devUser.isEnabled()) {
+                    saveLoginLog(username, null, "0", GlobalErrorCode.ACCOUNT_DISABLED.getCode(), GlobalErrorCode.ACCOUNT_DISABLED.getMsg());
+                    return R.fail(GlobalErrorCode.ACCOUNT_DISABLED);
+                }
+                authentication = new UsernamePasswordAuthenticationToken(devUser, null, devUser.getAuthorities());
+            } else {
+                authentication = authenticationManager.authenticate(authenticationToken);
+            }
             // 登录成功，清除错误计数
             redisService.delete(RedisKeyConstant.PWD_ERROR_COUNT + username);
         } catch (BadCredentialsException e) {

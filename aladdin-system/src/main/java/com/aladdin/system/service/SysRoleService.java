@@ -17,6 +17,9 @@ public interface SysRoleService extends BaseService<SysRole> {
 
     List<SysRole> getRolesByUserId(Long userId);
 
+    /** 按 roleKey 查询角色 */
+    SysRole getRoleByKey(String roleKey);
+
     void assignResources(Long roleId, List<Long> resourceIds);
 
     void assignRoles(Long userId, List<Long> roleIds);

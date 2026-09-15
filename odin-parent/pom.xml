@@ -23,6 +23,8 @@
         <module>../aladdin-system</module>
         <module>../aladdin-auth</module>
         <module>../aladdin-file</module>
+        <module>../aladdin-biz</module>
+        <module>../aladdin-gateway</module>
     </modules>
 
     <properties>
@@ -72,6 +74,11 @@
             <dependency>
                 <groupId>com.aladdin.mis</groupId>
                 <artifactId>aladdin-file</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.aladdin.mis</groupId>
+                <artifactId>aladdin-biz</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
