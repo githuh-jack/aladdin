@@ -21,6 +21,8 @@ public class SysUser extends BaseEntity {
     private String email;
     private String phone;
     private String avatar;
+    /** 注册时填写的邀请码(绑定后被邀请标记) */
+    private String inviteCode;
     private Long deptId;
     private Integer status;
     /** 密码最后修改时间 */

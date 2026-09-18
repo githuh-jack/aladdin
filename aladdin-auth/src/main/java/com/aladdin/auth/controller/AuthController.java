@@ -81,7 +81,7 @@ public class AuthController {
 
     /**
      * 用户注册（简化版）
-     * 入参：username / password / nickname（可选） / email（可选）
+     * 入参：username / password / nickname（笔名，必填） / email（可选） / inviteCode（可选）
      * 流程：校验用户名是否重复 -> 加密密码 -> 入库 -> 绑定"普通用户"角色
      */
     @PostMapping("/register")
@@ -90,6 +90,7 @@ public class AuthController {
         String password = body.get("password");
         String nickname = body.get("nickname");
         String email = body.get("email");
+        String inviteCode = body.get("inviteCode");
         if (username == null || username.trim().isEmpty()
                 || password == null || password.trim().isEmpty()) {
             return R.fail(GlobalErrorCode.BAD_REQUEST);
@@ -100,13 +101,25 @@ public class AuthController {
         if (password.length() < 6 || password.length() > 50) {
             return R.fail(GlobalErrorCode.BAD_REQUEST.getCode(), "密码长度需在6-50之间");
         }
+        if (nickname == null || nickname.trim().isEmpty()) {
+            return R.fail(GlobalErrorCode.BAD_REQUEST.getCode(), "笔名不能为空");
+        }
+        if (nickname.trim().length() > 30) {
+            return R.fail(GlobalErrorCode.BAD_REQUEST.getCode(), "笔名最多30个字符");
+        }
+        // 邀请码可选填：填写时仅校验格式
+        if (inviteCode != null && !inviteCode.trim().isEmpty()
+                && !inviteCode.trim().matches("[A-Za-z0-9]{4,16}")) {
+            return R.fail(GlobalErrorCode.BAD_REQUEST.getCode(), "邀请码需为4-16位字母或数字");
+        }
         if (sysUserService.getByUsername(username) != null) {
             return R.fail(GlobalErrorCode.DATA_DUPLICATE.getCode(), "用户名已存在");
         }
         SysUser user = new SysUser();
         user.setUsername(username);
         user.setPassword(passwordEncoder.encode(password));
-        user.setNickname(nickname != null && !nickname.trim().isEmpty() ? nickname : username);
+        user.setNickname(nickname.trim());
+        user.setInviteCode(inviteCode == null ? "" : inviteCode.trim().toUpperCase());
         user.setEmail(email == null ? "" : email);
         user.setPhone("");
         user.setAvatar("");
