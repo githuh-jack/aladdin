@@ -88,12 +88,17 @@ public class DataInitRunner implements ApplicationRunner {
     }
 
     private void initResources() {
-        Integer count = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM sys_resource WHERE id >= 7", Integer.class);
-        if (count != null && count > 0) {
-            return;
-        }
-        jdbcTemplate.update("INSERT INTO sys_resource (id, resource_name, parent_id, sort, path, component, resource_type, perms, icon, status, sys001, sys003, sys005, sys006) VALUES " +
+        // 幂等补齐 id 1-31 全量资源(菜单M + 按钮F)，与 sql/init.sql 保持一致
+        // INSERT IGNORE 按 id 主键幂等：已存在的行不覆盖，缺失的自动补齐
+        jdbcTemplate.update("INSERT IGNORE INTO sys_resource (id, resource_name, parent_id, sort, path, component, resource_type, perms, icon, status, sys001, sys003, sys005, sys006) VALUES " +
+                // 一级菜单与系统管理子菜单
+                "(1, '系统管理', 0, 1, '/system', NULL, 'M', '', 'system', 1, NOW(), 1, 1, 'system'), " +
+                "(2, '用户管理', 1, 1, '/system/user', 'system/user/index', 'M', 'system:user:list', 'user', 1, NOW(), 1, 1, 'system'), " +
+                "(3, '角色管理', 1, 2, '/system/role', 'system/role/index', 'M', 'system:role:list', 'peoples', 1, NOW(), 1, 1, 'system'), " +
+                "(4, '资源管理', 1, 3, '/system/resource', 'system/resource/index', 'M', 'system:resource:list', 'tree-table', 1, NOW(), 1, 1, 'system'), " +
+                "(5, '部门管理', 1, 4, '/system/dept', 'system/dept/index', 'M', 'system:dept:list', 'tree', 1, NOW(), 1, 1, 'system'), " +
+                "(6, '字典管理', 1, 5, '/system/dict', 'system/dict/index', 'M', 'system:dict:list', 'dict', 1, NOW(), 1, 1, 'system'), " +
+                // 用户/角色/资源/部门/字典 按钮权限
                 "(7, '用户新增', 2, 1, '', '', 'F', 'system:user:add', '', 1, NOW(), 1, 1, 'system'), " +
                 "(8, '用户修改', 2, 2, '', '', 'F', 'system:user:edit', '', 1, NOW(), 1, 1, 'system'), " +
                 "(9, '用户删除', 2, 3, '', '', 'F', 'system:user:remove', '', 1, NOW(), 1, 1, 'system'), " +
@@ -108,8 +113,20 @@ public class DataInitRunner implements ApplicationRunner {
                 "(18, '部门删除', 5, 3, '', '', 'F', 'system:dept:remove', '', 1, NOW(), 1, 1, 'system'), " +
                 "(19, '字典新增', 6, 1, '', '', 'F', 'system:dict:add', '', 1, NOW(), 1, 1, 'system'), " +
                 "(20, '字典修改', 6, 2, '', '', 'F', 'system:dict:edit', '', 1, NOW(), 1, 1, 'system'), " +
-                "(21, '字典删除', 6, 3, '', '', 'F', 'system:dict:remove', '', 1, NOW(), 1, 1, 'system')");
-        log.info("初始化资源权限数据完成");
+                "(21, '字典删除', 6, 3, '', '', 'F', 'system:dict:remove', '', 1, NOW(), 1, 1, 'system'), " +
+                // 系统管理扩展子菜单
+                "(22, '菜单管理', 1, 6, '/system/menu', 'system/menu/index', 'M', 'system:menu:list', 'menu', 1, NOW(), 1, 1, 'system'), " +
+                "(23, '权限配置', 1, 7, '/system/permission', 'system/permission/index', 'M', 'system:permission:list', 'safety', 1, NOW(), 1, 1, 'system'), " +
+                "(24, '用户角色管理', 1, 8, '/system/user-role', 'system/user-role/index', 'M', 'system:userrole:list', 'team', 1, NOW(), 1, 1, 'system'), " +
+                "(25, '角色组织管理', 1, 9, '/system/role-dept', 'system/role-dept/index', 'M', 'system:roledept:list', 'cluster', 1, NOW(), 1, 1, 'system'), " +
+                "(26, '角色资源管理', 1, 10, '/system/role-resource', 'system/role-resource/index', 'M', 'system:roleresource:list', 'apartment', 1, NOW(), 1, 1, 'system'), " +
+                "(27, '操作日志', 1, 11, '/system/oper-log', 'system/oper-log/index', 'M', 'system:operlog:list', 'file-text', 1, NOW(), 1, 1, 'system'), " +
+                "(28, '登录日志', 1, 12, '/system/login-log', 'system/login-log/index', 'M', 'system:loginlog:list', 'login', 1, NOW(), 1, 1, 'system'), " +
+                // 菜单管理按钮
+                "(29, '菜单新增', 22, 1, '', '', 'F', 'system:menu:add', '', 1, NOW(), 1, 1, 'system'), " +
+                "(30, '菜单修改', 22, 2, '', '', 'F', 'system:menu:edit', '', 1, NOW(), 1, 1, 'system'), " +
+                "(31, '菜单删除', 22, 3, '', '', 'F', 'system:menu:remove', '', 1, NOW(), 1, 1, 'system')");
+        log.info("初始化资源权限数据完成(含系统管理菜单1-31)");
     }
 
     private void initUser() {
@@ -135,19 +152,14 @@ public class DataInitRunner implements ApplicationRunner {
     }
 
     private void initRoleResource() {
-        jdbcTemplate.update("DELETE FROM sys_role_resource WHERE role_id = 2 AND resource_id IN (1, 2, 3)");
-        Integer count = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM sys_role_resource WHERE role_id = 1 AND resource_id >= 7", Integer.class);
-        if (count != null && count > 0) {
-            return;
-        }
-        // admin角色：所有资源和权限
-        jdbcTemplate.update("INSERT INTO sys_role_resource (role_id, resource_id) VALUES " +
-                "(1, 7), (1, 8), (1, 9), (1, 10), (1, 11), (1, 12), (1, 13), (1, 14), (1, 15), " +
-                "(1, 16), (1, 17), (1, 18), (1, 19), (1, 20), (1, 21)");
-        // user角色：只有部门管理和字典查询
-        jdbcTemplate.update("INSERT IGNORE INTO sys_role_resource (role_id, resource_id) VALUES " +
-                "(2, 5), (2, 6)");
+        // admin角色：拥有全部资源1-31(幂等，缺失的自动补齐)
+        jdbcTemplate.update("INSERT INTO sys_role_resource (role_id, resource_id) " +
+                "SELECT 1, r.id FROM sys_resource r WHERE r.sys005 = 1 AND r.id BETWEEN 1 AND 31 " +
+                "AND NOT EXISTS (SELECT 1 FROM sys_role_resource x WHERE x.role_id = 1 AND x.resource_id = r.id)");
+        // user角色：系统管理/用户/角色/部门/字典基础菜单
+        jdbcTemplate.update("INSERT INTO sys_role_resource (role_id, resource_id) " +
+                "SELECT 2, r.id FROM sys_resource r WHERE r.sys005 = 1 AND r.id IN (1, 2, 3, 5, 6) " +
+                "AND NOT EXISTS (SELECT 1 FROM sys_role_resource x WHERE x.role_id = 2 AND x.resource_id = r.id)");
         log.info("初始化角色资源关联完成");
     }
 
