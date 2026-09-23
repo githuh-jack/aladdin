@@ -69,7 +69,11 @@ public class SysUserController {
         user.setPassword(passwordEncoder.encode(user.getPassword()));
         // 新用户默认需要强制修改密码
         user.setPwdForceChange(1);
-        return sysUserService.save(user) ? R.ok() : R.fail();
+        boolean saved = sysUserService.save(user);
+        if (saved && user.getDeptIds() != null && !user.getDeptIds().isEmpty()) {
+            sysUserService.saveUserDepts(user.getId(), user.getDeptIds());
+        }
+        return saved ? R.ok() : R.fail();
     }
 
     @PostMapping("/edit")
@@ -84,7 +88,12 @@ public class SysUserController {
                 user.setPassword(existing.getPassword());
             }
         }
-        return sysUserService.updateById(user) ? R.ok() : R.fail();
+        boolean updated = sysUserService.updateById(user);
+        // 多部门关联(传空数组则清空，不传则不动)
+        if (updated && user.getDeptIds() != null) {
+            sysUserService.saveUserDepts(user.getId(), user.getDeptIds());
+        }
+        return updated ? R.ok() : R.fail();
     }
 
     @PostMapping("/remove/{id}")
@@ -119,7 +128,7 @@ public class SysUserController {
         data.put("avatar", user.getAvatar());
         data.put("roles", roleKeys);
         data.put("desc", "");
-        data.put("homePath", "/workspace");
+        data.put("homePath", "/dashboard/analytics");
         return R.ok(data);
     }
 

@@ -1,7 +1,7 @@
 package com.aladdin.common.security.sso;
 
 import com.aladdin.common.security.entity.OmUser;
-import com.aladdin.common.security.redis.RedisService;
+import com.aladdin.common.redis.RedisService;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;

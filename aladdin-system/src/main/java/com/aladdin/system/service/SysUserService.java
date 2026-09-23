@@ -46,4 +46,9 @@ public interface SysUserService extends BaseService<SysUser> {
 
     /** 分页查询用户列表 */
     PageResult<SysUser> listPage(PageQuery pageQuery, String username, Integer status, Long deptId);
+
+    /**
+     * 保存用户多部门关联(第一个为主部门，同步更新sys_user.dept_id)
+     */
+    void saveUserDepts(Long userId, java.util.List<Long> deptIds);
 }

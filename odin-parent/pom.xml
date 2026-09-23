@@ -19,11 +19,14 @@
     <modules>
         <module>../aladdin-common-core</module>
         <module>../aladdin-common-db</module>
+        <module>../aladdin-common-redis</module>
+        <module>../aladdin-common-log</module>
         <module>../aladdin-common-security</module>
         <module>../aladdin-system</module>
         <module>../aladdin-auth</module>
         <module>../aladdin-file</module>
         <module>../aladdin-biz</module>
+        <module>../aladdin-boot</module>
         <module>../aladdin-gateway</module>
     </modules>
 
@@ -58,6 +61,16 @@
             </dependency>
             <dependency>
                 <groupId>com.aladdin.mis</groupId>
+                <artifactId>aladdin-common-redis</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.aladdin.mis</groupId>
+                <artifactId>aladdin-common-log</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.aladdin.mis</groupId>
                 <artifactId>aladdin-common-security</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -79,6 +92,11 @@
             <dependency>
                 <groupId>com.aladdin.mis</groupId>
                 <artifactId>aladdin-biz</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.aladdin.mis</groupId>
+                <artifactId>aladdin-boot</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

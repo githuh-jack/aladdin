@@ -2,8 +2,9 @@ package com.aladdin.system.dao;
 
 import com.aladdin.common.db.base.BaseDao;
 import com.aladdin.system.entity.SysTenant;
-import org.apache.ibatis.annotations.Param;
-import org.apache.ibatis.annotations.Select;
+import com.mybatisflex.core.query.QueryWrapper;
+
+import static com.aladdin.system.entity.table.SysTenantTableDef.SYS_TENANT;
 
 /**
  * 租户DAO
@@ -13,6 +14,12 @@ import org.apache.ibatis.annotations.Select;
  */
 public interface SysTenantDao extends BaseDao<SysTenant> {
 
-    @Select("SELECT * FROM sys_tenant WHERE tenant_code = #{tenantCode} AND sys005 = 1")
-    SysTenant selectByTenantCode(@Param("tenantCode") String tenantCode);
+    /**
+     * 按租户编码查询(sys005=1 由 flex 自动追加)
+     */
+    default SysTenant selectByTenantCode(String tenantCode) {
+        return selectOneByQuery(QueryWrapper.create()
+                .from(SYS_TENANT)
+                .where(SYS_TENANT.TENANT_CODE.eq(tenantCode)));
+    }
 }

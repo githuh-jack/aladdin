@@ -7,14 +7,16 @@ import com.aladdin.common.core.exception.GlobalErrorCode;
 import com.aladdin.common.core.utils.IpUtil;
 import com.aladdin.common.core.utils.ServletUtil;
 import com.aladdin.common.security.config.SecurityProperties;
-import com.aladdin.common.security.entity.LoginLog;
-import com.aladdin.common.security.log.LoginLogService;
-import com.aladdin.common.security.redis.RedisService;
+import com.aladdin.common.log.entity.LoginLog;
+import com.aladdin.common.log.LoginLogService;
+import com.aladdin.common.redis.RedisService;
 import com.aladdin.common.security.service.LoginUserDetails;
 import com.aladdin.common.security.service.SecurityUserDetailsService;
 import com.aladdin.common.security.service.TokenService;
+import com.aladdin.system.entity.SysApp;
 import com.aladdin.system.entity.SysRole;
 import com.aladdin.system.entity.SysUser;
+import com.aladdin.system.service.SysAppService;
 import com.aladdin.system.service.SysRoleService;
 import com.aladdin.system.service.SysUserService;
 import lombok.extern.slf4j.Slf4j;
@@ -74,6 +76,9 @@ public class AuthController {
     private SysRoleService sysRoleService;
 
     @Autowired
+    private SysAppService sysAppService;
+
+    @Autowired
     private PasswordEncoder passwordEncoder;
 
     @Autowired
@@ -114,6 +119,11 @@ public class AuthController {
         }
         if (sysUserService.getByUsername(username) != null) {
             return R.fail(GlobalErrorCode.DATA_DUPLICATE.getCode(), "用户名已存在");
+        }
+        // 应用注册开关：传信纸船应用关闭注册时禁止注册
+        SysApp paperBoat = sysAppService.getByAppCode("paper_boat");
+        if (paperBoat != null && paperBoat.getAllowRegister() != null && paperBoat.getAllowRegister() == 0) {
+            return R.fail(GlobalErrorCode.BAD_REQUEST.getCode(), "当前应用未开放注册");
         }
         SysUser user = new SysUser();
         user.setUsername(username);
@@ -196,7 +206,7 @@ public class AuthController {
         data.put("username", loginUser.getUsername());
         data.put("realName", loginUser.getNickname());
         data.put("roles", loginUser.getRoleKeys());
-        data.put("homePath", "/workspace");
+        data.put("homePath", "/dashboard/analytics");
 
         saveLoginLog(username, loginUser.getUserId(), "1", GlobalErrorCode.LOGIN_SUCCESS.getCode(), "登录成功");
         return R.ok("登录成功", data);
@@ -246,7 +256,7 @@ public class AuthController {
             data.put("avatar", "");
             data.put("roles", loginUser.getRoleKeys());
             data.put("desc", "");
-            data.put("homePath", "/dashboard/workspace");
+            data.put("homePath", "/dashboard/analytics");
             return R.ok(data);
         }
         return R.fail("未登录");

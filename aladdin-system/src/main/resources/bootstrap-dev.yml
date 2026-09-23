@@ -1,5 +1,0 @@
-server:
-  servlet:
-    context-path: /business
-  port: 10900
-

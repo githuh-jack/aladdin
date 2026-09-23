@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <artifactId>odin-parent</artifactId>
+        <groupId>com.aladdin.mis</groupId>
+        <version>0.0.1-SNAPSHOT</version>
+        <relativePath>../odin-parent/pom.xml</relativePath>
+    </parent>
+
+    <artifactId>aladdin-gateway</artifactId>
+    <version>${project.version}</version>
+    <packaging>jar</packaging>
+    <name>aladdin-gateway</name>
+    <description>API网关：路由转发、认证鉴权、限流熔断</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-gateway</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-config</artifactId>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <finalName>aladdin-gateway</finalName>
+    </build>
+</project>

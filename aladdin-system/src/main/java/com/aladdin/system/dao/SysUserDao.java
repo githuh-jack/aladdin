@@ -2,96 +2,188 @@ package com.aladdin.system.dao;
 
 import com.aladdin.common.db.base.BaseDao;
 import com.aladdin.system.entity.SysUser;
-import org.apache.ibatis.annotations.Param;
-import org.apache.ibatis.annotations.Select;
-import org.apache.ibatis.annotations.Update;
+import com.mybatisflex.core.query.QueryColumn;
+import com.mybatisflex.core.query.QueryCondition;
+import com.mybatisflex.core.query.QueryWrapper;
+import com.mybatisflex.core.row.Row;
 
-import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
+
+import static com.aladdin.system.entity.table.SysDeptTableDef.SYS_DEPT;
+import static com.aladdin.system.entity.table.SysResourceTableDef.SYS_RESOURCE;
+import static com.aladdin.system.entity.table.SysRoleTableDef.SYS_ROLE;
+import static com.aladdin.system.entity.table.SysUserTableDef.SYS_USER;
 
 /**
  * 系统用户DAO
+ * 单表查询走 QueryWrapper（主表逻辑删除 sys005=1 由 flex 全局配置自动附加）；
+ * 被关联表统一用表名字符串 join（flex 不会对无实体表自动附加逻辑删除），
+ * 关联表是否补 sys005 过滤与原 SQL 逐条对齐。
  *
  * @author cles
  * @date 2026/05/06
  */
 public interface SysUserDao extends BaseDao<SysUser> {
 
-    @Select("SELECT * FROM sys_user WHERE username = #{username} AND sys005 = 1")
-    SysUser selectByUsername(@Param("username") String username);
+    default SysUser selectByUsername(String username) {
+        return selectOneByQuery(QueryWrapper.create()
+                .from(SYS_USER)
+                .where(SYS_USER.USERNAME.eq(username)));
+    }
 
-    @Select("SELECT r.role_key FROM sys_role r " +
-            "INNER JOIN sys_user_role ur ON r.id = ur.role_id " +
-            "WHERE ur.user_id = #{userId} AND r.sys005 = 1")
-    Set<String> selectRoleKeysByUserId(@Param("userId") Long userId);
+    /** 用户角色key(sys_user_role 关联表无实体，字符串join) */
+    default Set<String> selectRoleKeysByUserId(Long userId) {
+        QueryWrapper query = QueryWrapper.create()
+                .select(SYS_ROLE.ROLE_KEY)
+                .from(SYS_ROLE)
+                .innerJoin("sys_user_role")
+                .on(SYS_ROLE.ID.eq(new QueryColumn("sys_user_role", "role_id")))
+                .where(new QueryColumn("sys_user_role", "user_id").eq(userId));
+        return new HashSet<>(selectListByQueryAs(query, String.class));
+    }
 
-    @Select("SELECT res.perms FROM sys_resource res " +
-            "INNER JOIN sys_role_resource rr ON res.id = rr.resource_id " +
-            "INNER JOIN sys_user_role ur ON rr.role_id = ur.role_id " +
-            "WHERE ur.user_id = #{userId} AND res.sys005 = 1")
-    Set<String> selectPermsByUserId(@Param("userId") Long userId);
+    /** 用户权限标识(sys_role_resource/sys_user_role 均为关联表) */
+    default Set<String> selectPermsByUserId(Long userId) {
+        QueryWrapper query = QueryWrapper.create()
+                .select(SYS_RESOURCE.PERMS)
+                .from(SYS_RESOURCE)
+                .innerJoin("sys_role_resource")
+                .on(SYS_RESOURCE.ID.eq(new QueryColumn("sys_role_resource", "resource_id")))
+                .innerJoin("sys_user_role")
+                .on(new QueryColumn("sys_role_resource", "role_id").eq(new QueryColumn("sys_user_role", "role_id")))
+                .where(new QueryColumn("sys_user_role", "user_id").eq(userId));
+        return new HashSet<>(selectListByQueryAs(query, String.class));
+    }
 
-    @Select("SELECT DISTINCT res.perms FROM sys_resource res " +
-            "WHERE res.sys005 = 1 AND res.perms IS NOT NULL AND res.perms != ''")
-    Set<String> selectAllPerms();
+    default Set<String> selectAllPerms() {
+        QueryWrapper query = QueryWrapper.create()
+                .select(SYS_RESOURCE.PERMS)
+                .from(SYS_RESOURCE)
+                .where(SYS_RESOURCE.PERMS.isNotNull(true))
+                .and(SYS_RESOURCE.PERMS.ne(""));
+        return new HashSet<>(selectListByQueryAs(query, String.class));
+    }
 
-    @Select("SELECT u.*, d.dept_name FROM sys_user u " +
-            "LEFT JOIN sys_dept d ON u.dept_id = d.id " +
-            "WHERE u.id = #{id} AND u.sys005 = 1")
-    SysUser selectUserWithDeptById(@Param("id") Long id);
+    /** 用户详情(带部门名，原SQL不过滤已删部门，故 sys_dept 用字符串join) */
+    default SysUser selectUserWithDeptById(Long id) {
+        QueryWrapper query = QueryWrapper.create()
+                .select(SYS_USER.DEFAULT_COLUMNS, new QueryColumn("sys_dept", "dept_name"))
+                .from(SYS_USER)
+                .leftJoin("sys_dept")
+                .on(SYS_USER.DEPT_ID.eq(new QueryColumn("sys_dept", "id")))
+                .where(SYS_USER.ID.eq(id));
+        return selectOneByQuery(query);
+    }
 
-    @Select("<script>" +
-            "SELECT u.*, d.dept_name FROM sys_user u " +
-            "LEFT JOIN sys_dept d ON u.dept_id = d.id " +
-            "WHERE u.sys005 = 1 " +
-            "<if test='username != null and username != \"\"'>" +
-            "AND u.username LIKE CONCAT('%',#{username},'%') " +
-            "</if>" +
-            "<if test='status != null'>" +
-            "AND u.status = #{status} " +
-            "</if>" +
-            "<if test='deptId != null'>" +
-            "AND u.dept_id = #{deptId} " +
-            "</if>" +
-            "ORDER BY u.id ASC " +
-            "LIMIT #{limit} OFFSET #{offset} " +
-            "</script>")
-    List<SysUser> selectUserListWithDept(@Param("username") String username,
-                                          @Param("status") Integer status,
-                                          @Param("deptId") Long deptId,
-                                          @Param("offset") int offset,
-                                          @Param("limit") int limit);
+    /** 分页用户列表(带部门名与用户名/状态/部门过滤，EXISTS 等价改写为 IN 子查询) */
+    default List<SysUser> selectUserListWithDept(String username, Integer status, Long deptId, int offset, int limit) {
+        QueryWrapper query = QueryWrapper.create()
+                .select(SYS_USER.DEFAULT_COLUMNS, new QueryColumn("sys_dept", "dept_name"))
+                .from(SYS_USER)
+                .leftJoin("sys_dept")
+                .on(SYS_USER.DEPT_ID.eq(new QueryColumn("sys_dept", "id")));
+        if (username != null && !username.isEmpty()) {
+            query.and(SYS_USER.USERNAME.like(username));
+        }
+        if (status != null) {
+            query.and(SYS_USER.STATUS.eq(status));
+        }
+        if (deptId != null) {
+            QueryCondition deptCond = SYS_USER.DEPT_ID.eq(deptId)
+                    .or(SYS_USER.ID.in(QueryWrapper.create()
+                            .select(new QueryColumn("user_id"))
+                            .from("sys_user_dept")
+                            .where(new QueryColumn("dept_id").eq(deptId))));
+            query.and(deptCond);
+        }
+        query.orderBy(SYS_USER.ID.asc()).offset(offset).limit(limit);
+        return selectListByQuery(query);
+    }
 
-    @Select("<script>" +
-            "SELECT COUNT(*) FROM sys_user u " +
-            "WHERE u.sys005 = 1 " +
-            "<if test='username != null and username != \"\"'>" +
-            "AND u.username LIKE CONCAT('%',#{username},'%') " +
-            "</if>" +
-            "<if test='status != null'>" +
-            "AND u.status = #{status} " +
-            "</if>" +
-            "<if test='deptId != null'>" +
-            "AND u.dept_id = #{deptId} " +
-            "</if>" +
-            "</script>")
-    long countUserListWithDept(@Param("username") String username,
-                                @Param("status") Integer status,
-                                @Param("deptId") Long deptId);
+    default long countUserListWithDept(String username, Integer status, Long deptId) {
+        QueryWrapper query = QueryWrapper.create().from(SYS_USER);
+        if (username != null && !username.isEmpty()) {
+            query.and(SYS_USER.USERNAME.like(username));
+        }
+        if (status != null) {
+            query.and(SYS_USER.STATUS.eq(status));
+        }
+        if (deptId != null) {
+            QueryCondition deptCond = SYS_USER.DEPT_ID.eq(deptId)
+                    .or(SYS_USER.ID.in(QueryWrapper.create()
+                            .select(new QueryColumn("user_id"))
+                            .from("sys_user_dept")
+                            .where(new QueryColumn("dept_id").eq(deptId))));
+            query.and(deptCond);
+        }
+        return selectCountByQuery(query);
+    }
 
-    @Update("UPDATE sys_user SET password = #{password} WHERE id = #{id}")
-    int updatePassword(@Param("id") Long id, @Param("password") String password);
+    /** 用户-部门关联(含部门名；userIds 为逗号分隔ID串，来源系统内部，改解析后参数化IN防注入) */
+    default List<Map<String, Object>> selectUserDeptRels(String userIds) {
+        List<Long> ids = new ArrayList<>();
+        if (userIds != null && !userIds.isEmpty()) {
+            Arrays.stream(userIds.split(","))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .forEach(s -> ids.add(Long.valueOf(s)));
+        }
+        if (ids.isEmpty()) {
+            return new ArrayList<>();
+        }
+        QueryWrapper query = QueryWrapper.create()
+                .select(new QueryColumn("sys_user_dept", "user_id"),
+                        new QueryColumn("sys_user_dept", "dept_id"),
+                        new QueryColumn("sys_dept", "dept_name"))
+                .from("sys_user_dept")
+                .innerJoin("sys_dept")
+                .on(new QueryColumn("sys_dept", "id").eq(new QueryColumn("sys_user_dept", "dept_id"))
+                        .and(SYS_DEPT.SYS005.eq(1)))
+                .where(new QueryColumn("sys_user_dept", "user_id").in(ids));
+        List<Row> rows = selectRowsByQuery(query);
+        return rows.stream().map(r -> (Map<String, Object>) r).collect(Collectors.toList());
+    }
 
-    @Update("UPDATE sys_user SET status = #{status} WHERE id = #{id}")
-    int updateStatus(@Param("id") Long id, @Param("status") Integer status);
+    default int updatePassword(Long id, String password) {
+        SysUser u = new SysUser();
+        u.setId(id);
+        u.setPassword(password);
+        return update(u);
+    }
 
-    @Update("UPDATE sys_user SET password = #{password}, pwd_change_time = #{pwdChangeTime}, pwd_force_change = 0 WHERE id = #{id}")
-    int updatePasswordWithTime(@Param("id") Long id, @Param("password") String password, @Param("pwdChangeTime") LocalDateTime pwdChangeTime);
+    default int updateStatus(Long id, Integer status) {
+        SysUser u = new SysUser();
+        u.setId(id);
+        u.setStatus(status);
+        return update(u);
+    }
 
-    @Update("UPDATE sys_user SET pwd_force_change = #{forceChange} WHERE id = #{id}")
-    int updatePwdForceChange(@Param("id") Long id, @Param("forceChange") Integer forceChange);
+    default int updatePasswordWithTime(Long id, String password, java.time.LocalDateTime pwdChangeTime) {
+        SysUser u = new SysUser();
+        u.setId(id);
+        u.setPassword(password);
+        u.setPwdChangeTime(pwdChangeTime);
+        u.setPwdForceChange(0);
+        return update(u);
+    }
 
-    @Select("SELECT * FROM sys_user WHERE username = #{username} AND tenant_id = #{tenantId} AND sys005 = 1")
-    SysUser selectByUsernameAndTenantId(@Param("username") String username, @Param("tenantId") Long tenantId);
+    default int updatePwdForceChange(Long id, Integer forceChange) {
+        SysUser u = new SysUser();
+        u.setId(id);
+        u.setPwdForceChange(forceChange);
+        return update(u);
+    }
+
+    default SysUser selectByUsernameAndTenantId(String username, Long tenantId) {
+        return selectOneByQuery(QueryWrapper.create()
+                .from(SYS_USER)
+                .where(SYS_USER.USERNAME.eq(username))
+                .and(SYS_USER.TENANT_ID.eq(tenantId)));
+    }
 }

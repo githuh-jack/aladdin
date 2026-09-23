@@ -2,8 +2,9 @@ package com.aladdin.system.dao;
 
 import com.aladdin.common.db.base.BaseDao;
 import com.aladdin.system.entity.SysOpenApiApp;
-import org.apache.ibatis.annotations.Param;
-import org.apache.ibatis.annotations.Select;
+import com.mybatisflex.core.query.QueryWrapper;
+
+import static com.aladdin.system.entity.table.SysOpenApiAppTableDef.SYS_OPEN_API_APP;
 
 /**
  * Open-API应用DAO
@@ -13,6 +14,12 @@ import org.apache.ibatis.annotations.Select;
  */
 public interface SysOpenApiAppDao extends BaseDao<SysOpenApiApp> {
 
-    @Select("SELECT * FROM sys_open_api_app WHERE access_key = #{accessKey} AND sys005 = 1")
-    SysOpenApiApp selectByAccessKey(@Param("accessKey") String accessKey);
+    /**
+     * 按 accessKey 查询(sys005=1 由 flex 自动追加)
+     */
+    default SysOpenApiApp selectByAccessKey(String accessKey) {
+        return selectOneByQuery(QueryWrapper.create()
+                .from(SYS_OPEN_API_APP)
+                .where(SYS_OPEN_API_APP.ACCESS_KEY.eq(accessKey)));
+    }
 }

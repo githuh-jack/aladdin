@@ -60,11 +60,16 @@ public class TableInitRunner implements ApplicationRunner {
               `username` varchar(50) NOT NULL,
               `password` varchar(200) NOT NULL,
               `nickname` varchar(50) DEFAULT '',
+              `real_name` varchar(50) DEFAULT '' COMMENT '姓名',
               `email` varchar(50) DEFAULT '',
               `phone` varchar(20) DEFAULT '',
               `avatar` varchar(200) DEFAULT '',
+              `invite_code` varchar(16) DEFAULT '' COMMENT '注册时填写的邀请码',
               `dept_id` bigint DEFAULT NULL,
+              `tenant_id` bigint DEFAULT NULL COMMENT '租户ID',
               `status` int DEFAULT 1,
+              `pwd_change_time` datetime DEFAULT NULL COMMENT '密码最后修改时间',
+              `pwd_force_change` int DEFAULT 0 COMMENT '是否首次登录需修改密码 0否1是',
               `sys001` datetime DEFAULT NULL,
               `sys002` datetime DEFAULT NULL,
               `sys003` bigint DEFAULT NULL,
@@ -83,8 +88,9 @@ public class TableInitRunner implements ApplicationRunner {
               `role_name` varchar(50) NOT NULL,
               `role_key` varchar(50) NOT NULL,
               `sort` int DEFAULT 0,
-              `data_scope` int DEFAULT 1,
+              `data_scope` int DEFAULT 1 COMMENT '数据权限范围 1全部 2自定义 3本部门 4本部门及以下 5仅本人',
               `status` int DEFAULT 1,
+              `remark` varchar(500) DEFAULT '' COMMENT '备注',
               `sys001` datetime DEFAULT NULL,
               `sys002` datetime DEFAULT NULL,
               `sys003` bigint DEFAULT NULL,
@@ -136,7 +142,7 @@ public class TableInitRunner implements ApplicationRunner {
               `role_id` bigint NOT NULL,
               `resource_id` bigint NOT NULL,
               PRIMARY KEY (`id`),
-              KEY `idx_role_id` (`role_id`),
+              UNIQUE KEY `uk_role_resource` (`role_id`, `resource_id`),
               KEY `idx_resource_id` (`resource_id`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
             """);
@@ -274,6 +280,50 @@ public class TableInitRunner implements ApplicationRunner {
               PRIMARY KEY (`id`),
               KEY `idx_parent_id` (`parent_id`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统默认菜单表'
+            """);
+
+        TABLE_DDL.put("sys_app", """
+            CREATE TABLE IF NOT EXISTS `sys_app` (
+              `id` bigint NOT NULL AUTO_INCREMENT,
+              `app_name` varchar(100) NOT NULL COMMENT '应用名称',
+              `app_code` varchar(50) NOT NULL COMMENT '应用编码',
+              `description` varchar(500) DEFAULT '' COMMENT '应用描述',
+              `allow_register` int DEFAULT 1 COMMENT '是否准许注册 0否 1是',
+              `dept_id` bigint DEFAULT NULL COMMENT '关联根部门ID',
+              `menu_id` bigint DEFAULT NULL COMMENT '关联菜单根节点ID',
+              `init_sql` longtext COMMENT '应用相关表初始化DDL语句(分号分隔)',
+              `tables_initialized` int DEFAULT 0 COMMENT '相关表是否已初始化 0否 1是',
+              `status` int DEFAULT 1,
+              `tenant_id` bigint DEFAULT NULL,
+              `sys001` datetime DEFAULT NULL,
+              `sys002` datetime DEFAULT NULL,
+              `sys003` bigint DEFAULT NULL,
+              `sys004` bigint DEFAULT NULL,
+              `sys005` int DEFAULT 1,
+              `sys006` varchar(64) DEFAULT '',
+              `sys007` varchar(64) DEFAULT '',
+              PRIMARY KEY (`id`),
+              UNIQUE KEY `uk_app_code` (`app_code`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='应用表'
+            """);
+
+        TABLE_DDL.put("sys_user_dept", """
+            CREATE TABLE IF NOT EXISTS `sys_user_dept` (
+              `id` bigint NOT NULL AUTO_INCREMENT,
+              `user_id` bigint NOT NULL,
+              `dept_id` bigint NOT NULL,
+              `is_primary` int DEFAULT 0 COMMENT '是否主部门 0否 1是',
+              `sys001` datetime DEFAULT NULL,
+              `sys002` datetime DEFAULT NULL,
+              `sys003` bigint DEFAULT NULL,
+              `sys004` bigint DEFAULT NULL,
+              `sys005` int DEFAULT 1,
+              `sys006` varchar(64) DEFAULT '',
+              `sys007` varchar(64) DEFAULT '',
+              PRIMARY KEY (`id`),
+              UNIQUE KEY `uk_user_dept` (`user_id`, `dept_id`),
+              KEY `idx_dept_id` (`dept_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户部门关联表'
             """);
     }
 

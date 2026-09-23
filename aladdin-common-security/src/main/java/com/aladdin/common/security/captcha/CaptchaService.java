@@ -1,7 +1,7 @@
 package com.aladdin.common.security.captcha;
 
 import com.aladdin.common.core.constant.RedisKeyConstant;
-import com.aladdin.common.security.redis.RedisService;
+import com.aladdin.common.redis.RedisService;
 import org.springframework.stereotype.Component;
 
 import javax.imageio.ImageIO;

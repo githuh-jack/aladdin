@@ -34,6 +34,10 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <!-- classifier=exec：主产物保持 thin jar 供 aladdin-boot 依赖，可执行 fat jar 为 aladdin-auth-exec.jar -->
+                    <classifier>exec</classifier>
+                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

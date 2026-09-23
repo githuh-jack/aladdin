@@ -2,7 +2,7 @@ package com.aladdin.system.service.impl;
 
 import com.aladdin.common.core.constant.RedisKeyConstant;
 import com.aladdin.common.db.base.BaseServiceImpl;
-import com.aladdin.common.security.redis.RedisService;
+import com.aladdin.common.redis.RedisService;
 import com.aladdin.system.dao.SysTenantDao;
 import com.aladdin.system.entity.SysTenant;
 import com.aladdin.system.service.SysTenantService;

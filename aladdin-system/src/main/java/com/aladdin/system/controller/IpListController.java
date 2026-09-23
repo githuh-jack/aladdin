@@ -2,7 +2,7 @@ package com.aladdin.system.controller;
 
 import com.aladdin.common.core.constant.RedisKeyConstant;
 import com.aladdin.common.core.domain.R;
-import com.aladdin.common.security.redis.RedisService;
+import com.aladdin.common.redis.RedisService;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 

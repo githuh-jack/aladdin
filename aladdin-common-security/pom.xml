@@ -15,7 +15,7 @@
     <version>${project.version}</version>
     <packaging>jar</packaging>
     <name>aladdin-common-security</name>
-    <description>安全认证模块：Spring Security、JWT、权限校验、XSS防护、操作日志、Redis</description>
+    <description>安全认证模块：Spring Security、JWT、权限校验、XSS防护、验证码、租户、License</description>
 
     <dependencies>
         <dependency>
@@ -28,6 +28,16 @@
             <artifactId>aladdin-common-db</artifactId>
             <version>${project.version}</version>
             <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>com.aladdin.mis</groupId>
+            <artifactId>aladdin-common-redis</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.aladdin.mis</groupId>
+            <artifactId>aladdin-common-log</artifactId>
+            <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -49,14 +59,6 @@
             <artifactId>jjwt-jackson</artifactId>
             <version>0.11.5</version>
             <scope>runtime</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-data-redis</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.redisson</groupId>
-            <artifactId>redisson-spring-boot-starter</artifactId>
         </dependency>
         <dependency>
             <groupId>de.schlichtherle.truelicense</groupId>

@@ -6,6 +6,7 @@ import com.aladdin.common.core.exception.GlobalErrorCode;
 import com.aladdin.common.security.config.SecurityProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -31,12 +32,12 @@ public class LoginService {
 
     private final TokenService tokenService;
     private final PasswordEncoder passwordEncoder;
-    private final SecurityUserDetailsService userDetailsService;
+    private final ObjectProvider<SecurityUserDetailsService> userDetailsService;
     private final SecurityProperties securityProperties;
 
     public LoginService(TokenService tokenService,
                         PasswordEncoder passwordEncoder,
-                        SecurityUserDetailsService userDetailsService,
+                        ObjectProvider<SecurityUserDetailsService> userDetailsService,
                         SecurityProperties securityProperties) {
         this.tokenService = tokenService;
         this.passwordEncoder = passwordEncoder;
@@ -50,7 +51,8 @@ public class LoginService {
     public Map<String, Object> login(String username, String password) {
         UserDetails userDetails;
         try {
-            userDetails = userDetailsService.loadUserByUsername(username);
+            // UserDetailsService 实现在 system 模块；biz 独立运行无此 bean，登录调用将统一走"用户名或密码错误"
+            userDetails = userDetailsService.getObject().loadUserByUsername(username);
         } catch (Exception e) {
             log.warn("用户不存在: {}", username);
             throw new BusinessException(GlobalErrorCode.LOGIN_PASSWORD_ERROR, "用户名或密码错误");

@@ -33,6 +33,10 @@ mybatis-flex:
   configuration:
     map-underscore-to-camel-case: true
   mapper-locations: classpath*:/mybatis-mapper/**/*.xml
+  global-config:
+    logic-delete-column: sys005
+    normal-value-of-logic-delete: 1
+    deleted-value-of-logic-delete: 0
 
 aladdin:
   security:

@@ -4,7 +4,7 @@ import com.aladdin.common.core.constant.RedisKeyConstant;
 import com.aladdin.common.core.exception.GlobalErrorCode;
 import com.aladdin.common.core.utils.IpUtil;
 import com.aladdin.common.security.config.SecurityProperties;
-import com.aladdin.common.security.redis.RedisService;
+import com.aladdin.common.redis.RedisService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

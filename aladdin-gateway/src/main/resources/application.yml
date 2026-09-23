@@ -1,0 +1,39 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: aladdin-gateway
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 43.142.17.3:8848
+        username: nacos
+        password: nacosbw123
+      config:
+        server-addr: 43.142.17.3:8848
+        username: nacos
+        password: nacosbw123
+        file-extension: yml
+    gateway:
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-id: true
+      routes:
+        - id: aladdin-auth
+          uri: http://localhost:9200
+          predicates:
+            - Path=/auth/**
+        - id: aladdin-system
+          uri: http://localhost:9201
+          predicates:
+            - Path=/system/**
+          filters:
+            - StripPrefix=1
+        - id: aladdin-biz
+          uri: http://localhost:9202
+          predicates:
+            - Path=/biz/**
+          filters:
+            - StripPrefix=1

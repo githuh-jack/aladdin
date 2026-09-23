@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <artifactId>odin-parent</artifactId>
+        <groupId>com.aladdin.mis</groupId>
+        <version>0.0.1-SNAPSHOT</version>
+        <relativePath>../odin-parent/pom.xml</relativePath>
+    </parent>
+
+    <artifactId>aladdin-common-redis</artifactId>
+    <version>${project.version}</version>
+    <packaging>jar</packaging>
+    <name>aladdin-common-redis</name>
+    <description>Redis公共模块：RedisService、RedisUtil、Redisson配置、分布式锁</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.aladdin.mis</groupId>
+            <artifactId>aladdin-common-core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.redisson</groupId>
+            <artifactId>redisson-spring-boot-starter</artifactId>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <finalName>aladdin-common-redis</finalName>
+    </build>
+</project>

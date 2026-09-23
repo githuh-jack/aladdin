@@ -2,12 +2,16 @@ package com.aladdin.system.dao;
 
 import com.aladdin.common.db.base.BaseDao;
 import com.aladdin.system.entity.SysRole;
+import com.mybatisflex.core.query.QueryColumn;
+import com.mybatisflex.core.query.QueryWrapper;
 import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
+
+import static com.aladdin.system.entity.table.SysRoleTableDef.SYS_ROLE;
 
 /**
  * 系统角色DAO
@@ -17,10 +21,16 @@ import java.util.List;
  */
 public interface SysRoleDao extends BaseDao<SysRole> {
 
-    @Select("SELECT r.* FROM sys_role r " +
-            "INNER JOIN sys_user_role ur ON r.id = ur.role_id " +
-            "WHERE ur.user_id = #{userId} AND r.sys005 = 1")
-    List<SysRole> selectRolesByUserId(@Param("userId") Long userId);
+    /**
+     * 查询用户角色(主表 sys005=1 由 flex 自动追加；关联表用字符串表名，避免逻辑删除条件破坏 JOIN)
+     */
+    default List<SysRole> selectRolesByUserId(Long userId) {
+        return selectListByQuery(QueryWrapper.create()
+                .from(SYS_ROLE)
+                .innerJoin("sys_user_role")
+                .on(SYS_ROLE.ID.eq(new QueryColumn("sys_user_role", "role_id")))
+                .where(new QueryColumn("sys_user_role", "user_id").eq(userId)));
+    }
 
     @Insert("<script>" +
             "INSERT INTO sys_role_resource (role_id, resource_id) VALUES " +

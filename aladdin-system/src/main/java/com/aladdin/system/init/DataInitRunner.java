@@ -8,6 +8,8 @@ import org.springframework.core.annotation.Order;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
+
 /**
  * 数据初始化
  *
@@ -37,10 +39,393 @@ public class DataInitRunner implements ApplicationRunner {
             initUserRole();
             initDictData();
             initMenus();
+            initApps();
+            initPaperBoatMenus();
             log.info("数据初始化完成");
         } catch (Exception e) {
             log.warn("数据初始化异常: {}", e.getMessage());
         }
+    }
+
+    /**
+     * 初始化应用数据(传信纸船)
+     * 幂等：应用/根部门/菜单根节点不存在时创建，并存储应用相关表初始化DDL
+     */
+    private void initApps() {
+        // 根部门：传信纸船
+        Integer deptCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM sys_dept WHERE parent_id = 0 AND dept_name = '传信纸船'", Integer.class);
+        if (deptCount == null || deptCount == 0) {
+            jdbcTemplate.update("INSERT INTO sys_dept (parent_id, dept_name, sort, status, sys001, sys003, sys005, sys006) " +
+                    "VALUES (0, '传信纸船', 0, 1, NOW(), 1, 1, 'system')");
+            log.info("初始化根部门: 传信纸船");
+        }
+        Long deptId = jdbcTemplate.queryForObject(
+                "SELECT id FROM sys_dept WHERE parent_id = 0 AND dept_name = '传信纸船' ORDER BY id LIMIT 1", Long.class);
+        // 菜单根节点：传信纸船(应用专属菜单挂在其下)
+        Integer menuCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM sys_resource WHERE parent_id = 0 AND path = '/app/paper_boat'", Integer.class);
+        if (menuCount == null || menuCount == 0) {
+            jdbcTemplate.update("INSERT INTO sys_resource (resource_name, parent_id, sort, path, component, resource_type, perms, icon, status, sys001, sys003, sys005, sys006) " +
+                    "VALUES ('传信纸船', 0, 9, '/app/paper_boat', NULL, 'M', '', 'ant-design:appstore-outlined', 1, NOW(), 1, 1, 'system')");
+            log.info("初始化应用菜单根节点: 传信纸船");
+        }
+        Long menuId = jdbcTemplate.queryForObject(
+                "SELECT id FROM sys_resource WHERE parent_id = 0 AND path = '/app/paper_boat' ORDER BY id LIMIT 1", Long.class);
+        // 应用：传信纸船(存储相关表初始化DDL)
+        Integer appCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM sys_app WHERE app_code = 'paper_boat'", Integer.class);
+        if (appCount == null || appCount == 0) {
+            jdbcTemplate.update("INSERT INTO sys_app (app_name, app_code, description, allow_register, dept_id, menu_id, init_sql, tables_initialized, status, sys001, sys003, sys005, sys006) " +
+                            "VALUES ('传信纸船', 'paper_boat', '阿拉丁传信纸船应用', 1, ?, ?, ?, 0, 1, NOW(), 1, 1, 'system')",
+                    deptId, menuId, buildPaperBoatInitSql());
+            log.info("初始化应用: 传信纸船");
+        }
+        // 兼容升级：已存在的应用行补菜单节点与初始化语句
+        jdbcTemplate.update("UPDATE sys_app SET menu_id = ?, init_sql = ? " +
+                        "WHERE app_code = 'paper_boat' AND (menu_id IS NULL OR init_sql IS NULL OR init_sql = '')",
+                menuId, buildPaperBoatInitSql());
+        // admin角色授权应用菜单根节点(NOT EXISTS判重，表无(role_id,resource_id)唯一键，INSERT IGNORE无法防重)
+        if (menuId != null) {
+            jdbcTemplate.update("INSERT INTO sys_role_resource (role_id, resource_id) " +
+                    "SELECT 1, ? FROM DUAL WHERE NOT EXISTS " +
+                    "(SELECT 1 FROM sys_role_resource WHERE role_id = 1 AND resource_id = ?)", menuId, menuId);
+        }
+    }
+
+    /**
+     * 初始化传信纸船应用子菜单(挂在 /app/paper_boat 根节点下，幂等按path判重)
+     */
+    private void initPaperBoatMenus() {
+        Long rootId = jdbcTemplate.queryForObject(
+                "SELECT id FROM sys_resource WHERE parent_id = 0 AND path = '/app/paper_boat' ORDER BY id LIMIT 1", Long.class);
+        if (rootId == null) {
+            log.warn("传信纸船菜单根节点不存在，跳过子菜单初始化");
+            return;
+        }
+        List<String[]> menus = List.of(
+                new String[]{"/app/paper_boat/user", "app/paper-boat/user/index", "应用用户", "lucide:users", "1"},
+                new String[]{"/app/paper_boat/letter", "app/paper-boat/letter/index", "信件管理", "lucide:mail", "2"},
+                new String[]{"/app/paper_boat/coin", "app/paper-boat/coin/index", "铜钱流水", "lucide:coins", "3"},
+                new String[]{"/app/paper_boat/reward", "app/paper-boat/reward/index", "奖励记录", "lucide:gift", "4"},
+                new String[]{"/app/paper_boat/invite", "app/paper-boat/invite/index", "邀请记录", "lucide:user-plus", "5"},
+                new String[]{"/app/paper_boat/bambooLog", "app/paper-boat/bamboo-log/index", "文竹记录", "lucide:sprout", "6"},
+                new String[]{"/app/paper_boat/config", "app/paper-boat/config/index", "应用配置", "lucide:settings", "7"});
+        for (String[] m : menus) {
+            Integer count = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM sys_resource WHERE path = ? AND parent_id = ?", Integer.class, m[0], rootId);
+            if (count == null || count == 0) {
+                jdbcTemplate.update("INSERT INTO sys_resource (resource_name, parent_id, sort, path, component, resource_type, perms, icon, status, sys001, sys003, sys005, sys006) " +
+                                "VALUES (?, ?, ?, ?, ?, 'M', 'app:paperBoat:list', ?, 1, NOW(), 1, 1, 'system')",
+                        m[2], rootId, Integer.parseInt(m[4]), m[0], m[1], m[3]);
+                Long menuId = jdbcTemplate.queryForObject(
+                        "SELECT id FROM sys_resource WHERE path = ? AND parent_id = ? ORDER BY id DESC LIMIT 1", Long.class, m[0], rootId);
+                jdbcTemplate.update("INSERT IGNORE INTO sys_role_resource (role_id, resource_id) VALUES (1, ?)", menuId);
+                log.info("初始化传信纸船子菜单: {}", m[2]);
+            }
+        }
+    }
+
+    /**
+     * 传信纸船应用相关表初始化DDL(biz_user为应用用户表，其余统一biz_前缀)
+     */
+    private String buildPaperBoatInitSql() {
+        List<String> ddls = List.of(
+                """
+                CREATE TABLE IF NOT EXISTS `biz_user` (
+                  `id` bigint NOT NULL AUTO_INCREMENT,
+                  `username` varchar(50) NOT NULL COMMENT '用户名',
+                  `password` varchar(100) NOT NULL COMMENT '密码',
+                  `nickname` varchar(50) DEFAULT '' COMMENT '昵称(笔名)',
+                  `real_name` varchar(50) DEFAULT '' COMMENT '姓名',
+                  `email` varchar(50) DEFAULT '',
+                  `phone` varchar(20) DEFAULT '',
+                  `avatar` varchar(200) DEFAULT '',
+                  `invite_code` varchar(16) DEFAULT '' COMMENT '注册时填写的邀请码',
+                  `coins` int DEFAULT 0 COMMENT '铜钱余额(文)',
+                  `credit_score` int DEFAULT 100 COMMENT '信用分',
+                  `status` int DEFAULT 1,
+                  `app_id` bigint DEFAULT NULL COMMENT '所属应用ID',
+                  `sys001` datetime DEFAULT NULL,
+                  `sys002` datetime DEFAULT NULL,
+                  `sys003` bigint DEFAULT NULL,
+                  `sys004` bigint DEFAULT NULL,
+                  `sys005` int DEFAULT 1,
+                  `sys006` varchar(64) DEFAULT '',
+                  `sys007` varchar(64) DEFAULT '',
+                  PRIMARY KEY (`id`),
+                  UNIQUE KEY `uk_username` (`username`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='应用用户表'
+                """,
+                """
+                CREATE TABLE IF NOT EXISTS `biz_friend` (
+                  `id` bigint NOT NULL AUTO_INCREMENT,
+                  `user_id` bigint NOT NULL COMMENT '用户ID',
+                  `friend_user_id` bigint NOT NULL COMMENT '好友用户ID',
+                  `apply_message` varchar(200) DEFAULT '' COMMENT '申请留言',
+                  `status` int DEFAULT 0 COMMENT '0申请中 1已通过 2已拒绝 3已拉黑',
+                  `app_id` bigint DEFAULT NULL,
+                  `sys001` datetime DEFAULT NULL,
+                  `sys002` datetime DEFAULT NULL,
+                  `sys003` bigint DEFAULT NULL,
+                  `sys004` bigint DEFAULT NULL,
+                  `sys005` int DEFAULT 1,
+                  `sys006` varchar(64) DEFAULT '',
+                  `sys007` varchar(64) DEFAULT '',
+                  PRIMARY KEY (`id`),
+                  UNIQUE KEY `uk_user_friend` (`user_id`, `friend_user_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='好友表'
+                """,
+                """
+                CREATE TABLE IF NOT EXISTS `biz_letter` (
+                  `id` bigint NOT NULL AUTO_INCREMENT,
+                  `sender_id` bigint NOT NULL COMMENT '发信人ID',
+                  `receiver_id` bigint DEFAULT NULL COMMENT '收信人ID(广场信为空)',
+                  `content` text COMMENT '信件内容',
+                  `letter_type` int DEFAULT 1 COMMENT '1私人信 2广场信',
+                  `coin_cost` int DEFAULT 0 COMMENT '耗用邮票(文)',
+                  `status` int DEFAULT 1 COMMENT '0已撤回 1正常',
+                  `send_time` datetime DEFAULT NULL,
+                  `app_id` bigint DEFAULT NULL,
+                  `sys001` datetime DEFAULT NULL,
+                  `sys002` datetime DEFAULT NULL,
+                  `sys003` bigint DEFAULT NULL,
+                  `sys004` bigint DEFAULT NULL,
+                  `sys005` int DEFAULT 1,
+                  `sys006` varchar(64) DEFAULT '',
+                  `sys007` varchar(64) DEFAULT '',
+                  PRIMARY KEY (`id`),
+                  KEY `idx_sender` (`sender_id`),
+                  KEY `idx_receiver` (`receiver_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='信件表'
+                """,
+                """
+                CREATE TABLE IF NOT EXISTS `biz_diary` (
+                  `id` bigint NOT NULL AUTO_INCREMENT,
+                  `user_id` bigint NOT NULL,
+                  `diary_date` date NOT NULL COMMENT '日记日期',
+                  `content` text COMMENT '日记内容',
+                  `mood` varchar(20) DEFAULT '' COMMENT '心情',
+                  `app_id` bigint DEFAULT NULL,
+                  `sys001` datetime DEFAULT NULL,
+                  `sys002` datetime DEFAULT NULL,
+                  `sys003` bigint DEFAULT NULL,
+                  `sys004` bigint DEFAULT NULL,
+                  `sys005` int DEFAULT 1,
+                  `sys006` varchar(64) DEFAULT '',
+                  `sys007` varchar(64) DEFAULT '',
+                  PRIMARY KEY (`id`),
+                  KEY `idx_user_date` (`user_id`, `diary_date`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='日记表'
+                """,
+                """
+                CREATE TABLE IF NOT EXISTS `biz_feeling` (
+                  `id` bigint NOT NULL AUTO_INCREMENT,
+                  `user_id` bigint NOT NULL,
+                  `letter_id` bigint DEFAULT NULL COMMENT '关联信件ID',
+                  `content` text COMMENT '感想内容',
+                  `app_id` bigint DEFAULT NULL,
+                  `sys001` datetime DEFAULT NULL,
+                  `sys002` datetime DEFAULT NULL,
+                  `sys003` bigint DEFAULT NULL,
+                  `sys004` bigint DEFAULT NULL,
+                  `sys005` int DEFAULT 1,
+                  `sys006` varchar(64) DEFAULT '',
+                  `sys007` varchar(64) DEFAULT '',
+                  PRIMARY KEY (`id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='感想表'
+                """,
+                """
+                CREATE TABLE IF NOT EXISTS `biz_note` (
+                  `id` bigint NOT NULL AUTO_INCREMENT,
+                  `user_id` bigint NOT NULL,
+                  `title` varchar(100) DEFAULT '' COMMENT '笔记标题',
+                  `content` text COMMENT '笔记内容',
+                  `app_id` bigint DEFAULT NULL,
+                  `sys001` datetime DEFAULT NULL,
+                  `sys002` datetime DEFAULT NULL,
+                  `sys003` bigint DEFAULT NULL,
+                  `sys004` bigint DEFAULT NULL,
+                  `sys005` int DEFAULT 1,
+                  `sys006` varchar(64) DEFAULT '',
+                  `sys007` varchar(64) DEFAULT '',
+                  PRIMARY KEY (`id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='笔记表'
+                """,
+                """
+                CREATE TABLE IF NOT EXISTS `biz_stamp` (
+                  `id` bigint NOT NULL AUTO_INCREMENT,
+                  `user_id` bigint NOT NULL,
+                  `stamp_name` varchar(100) DEFAULT '' COMMENT '邮票名称',
+                  `price` int DEFAULT 30 COMMENT '单价(文)',
+                  `image` varchar(200) DEFAULT '',
+                  `status` int DEFAULT 1,
+                  `app_id` bigint DEFAULT NULL,
+                  `sys001` datetime DEFAULT NULL,
+                  `sys002` datetime DEFAULT NULL,
+                  `sys003` bigint DEFAULT NULL,
+                  `sys004` bigint DEFAULT NULL,
+                  `sys005` int DEFAULT 1,
+                  `sys006` varchar(64) DEFAULT '',
+                  `sys007` varchar(64) DEFAULT '',
+                  PRIMARY KEY (`id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='邮票表'
+                """,
+                """
+                CREATE TABLE IF NOT EXISTS `biz_envelope` (
+                  `id` bigint NOT NULL AUTO_INCREMENT,
+                  `user_id` bigint NOT NULL,
+                  `envelope_name` varchar(100) DEFAULT '' COMMENT '信封名称',
+                  `image` varchar(200) DEFAULT '',
+                  `status` int DEFAULT 1,
+                  `app_id` bigint DEFAULT NULL,
+                  `sys001` datetime DEFAULT NULL,
+                  `sys002` datetime DEFAULT NULL,
+                  `sys003` bigint DEFAULT NULL,
+                  `sys004` bigint DEFAULT NULL,
+                  `sys005` int DEFAULT 1,
+                  `sys006` varchar(64) DEFAULT '',
+                  `sys007` varchar(64) DEFAULT '',
+                  PRIMARY KEY (`id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='信封表'
+                """,
+                """
+                CREATE TABLE IF NOT EXISTS `biz_coin_log` (
+                  `id` bigint NOT NULL AUTO_INCREMENT,
+                  `user_id` bigint NOT NULL,
+                  `change_type` varchar(50) NOT NULL COMMENT '变动类型(register/daily_login/checkin/first_letter等)',
+                  `change_amount` int NOT NULL COMMENT '变动数量(正加负减)',
+                  `balance` int DEFAULT 0 COMMENT '变动后余额',
+                  `related_id` bigint DEFAULT NULL COMMENT '关联业务ID',
+                  `remark` varchar(200) DEFAULT '' COMMENT '备注',
+                  `app_id` bigint DEFAULT NULL,
+                  `sys001` datetime DEFAULT NULL,
+                  `sys002` datetime DEFAULT NULL,
+                  `sys003` bigint DEFAULT NULL,
+                  `sys004` bigint DEFAULT NULL,
+                  `sys005` int DEFAULT 1,
+                  `sys006` varchar(64) DEFAULT '',
+                  `sys007` varchar(64) DEFAULT '',
+                  PRIMARY KEY (`id`),
+                  KEY `idx_user_id` (`user_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='铜钱流水表'
+                """,
+                """
+                CREATE TABLE IF NOT EXISTS `biz_config` (
+                  `id` bigint NOT NULL AUTO_INCREMENT,
+                  `config_key` varchar(100) NOT NULL COMMENT '配置键',
+                  `config_value` varchar(500) DEFAULT '' COMMENT '配置值',
+                  `remark` varchar(200) DEFAULT '' COMMENT '备注',
+                  `app_id` bigint DEFAULT NULL,
+                  `sys001` datetime DEFAULT NULL,
+                  `sys002` datetime DEFAULT NULL,
+                  `sys003` bigint DEFAULT NULL,
+                  `sys004` bigint DEFAULT NULL,
+                  `sys005` int DEFAULT 1,
+                  `sys006` varchar(64) DEFAULT '',
+                  `sys007` varchar(64) DEFAULT '',
+                  PRIMARY KEY (`id`),
+                  UNIQUE KEY `uk_config_key` (`config_key`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='应用配置表'
+                """,
+                """
+                CREATE TABLE IF NOT EXISTS `biz_invite_log` (
+                  `id` bigint NOT NULL AUTO_INCREMENT,
+                  `user_id` bigint NOT NULL COMMENT '邀请人ID',
+                  `invite_code` varchar(16) DEFAULT '' COMMENT '使用的邀请码',
+                  `invited_user_id` bigint DEFAULT NULL COMMENT '被邀请人ID',
+                  `reward_coins` int DEFAULT 0 COMMENT '奖励铜钱(文)',
+                  `app_id` bigint DEFAULT NULL,
+                  `sys001` datetime DEFAULT NULL,
+                  `sys002` datetime DEFAULT NULL,
+                  `sys003` bigint DEFAULT NULL,
+                  `sys004` bigint DEFAULT NULL,
+                  `sys005` int DEFAULT 1,
+                  `sys006` varchar(64) DEFAULT '',
+                  `sys007` varchar(64) DEFAULT '',
+                  PRIMARY KEY (`id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='邀请记录表'
+                """,
+                """
+                CREATE TABLE IF NOT EXISTS `biz_reward_log` (
+                  `id` bigint NOT NULL AUTO_INCREMENT,
+                  `user_id` bigint NOT NULL,
+                  `reward_type` varchar(50) NOT NULL COMMENT '奖励类型(register/daily_login/checkin7/checkin30/profile/first_letter/first_diary/invite/stamp)',
+                  `reward_coins` int DEFAULT 0 COMMENT '奖励铜钱(文)',
+                  `reward_date` date DEFAULT NULL COMMENT '奖励日期',
+                  `remark` varchar(200) DEFAULT '' COMMENT '备注',
+                  `app_id` bigint DEFAULT NULL,
+                  `sys001` datetime DEFAULT NULL,
+                  `sys002` datetime DEFAULT NULL,
+                  `sys003` bigint DEFAULT NULL,
+                  `sys004` bigint DEFAULT NULL,
+                  `sys005` int DEFAULT 1,
+                  `sys006` varchar(64) DEFAULT '',
+                  `sys007` varchar(64) DEFAULT '',
+                  PRIMARY KEY (`id`),
+                  KEY `idx_user_type_date` (`user_id`, `reward_type`, `reward_date`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='奖励记录表'
+                """,
+                """
+                CREATE TABLE IF NOT EXISTS `biz_bamboo` (
+                  `id` bigint NOT NULL AUTO_INCREMENT,
+                  `user_id` bigint NOT NULL,
+                  `height_cm` decimal(4,1) DEFAULT 0.0 COMMENT '文竹高度(cm)，最大5.0',
+                  `status` int DEFAULT 1,
+                  `app_id` bigint DEFAULT NULL,
+                  `sys001` datetime DEFAULT NULL,
+                  `sys002` datetime DEFAULT NULL,
+                  `sys003` bigint DEFAULT NULL,
+                  `sys004` bigint DEFAULT NULL,
+                  `sys005` int DEFAULT 1,
+                  `sys006` varchar(64) DEFAULT '',
+                  `sys007` varchar(64) DEFAULT '',
+                  PRIMARY KEY (`id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文竹表'
+                """,
+                """
+                CREATE TABLE IF NOT EXISTS `biz_bamboo_log` (
+                  `id` bigint NOT NULL AUTO_INCREMENT,
+                  `user_id` bigint NOT NULL,
+                  `bamboo_id` bigint NOT NULL,
+                  `change_type` varchar(50) DEFAULT '' COMMENT '变化类型(letter/diary)',
+                  `change_value` decimal(4,1) DEFAULT 0.0 COMMENT '变化高度(cm)',
+                  `reason` varchar(200) DEFAULT '' COMMENT '变化原因',
+                  `app_id` bigint DEFAULT NULL,
+                  `sys001` datetime DEFAULT NULL,
+                  `sys002` datetime DEFAULT NULL,
+                  `sys003` bigint DEFAULT NULL,
+                  `sys004` bigint DEFAULT NULL,
+                  `sys005` int DEFAULT 1,
+                  `sys006` varchar(64) DEFAULT '',
+                  `sys007` varchar(64) DEFAULT '',
+                  PRIMARY KEY (`id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文竹生长记录表'
+                """,
+                """
+                CREATE TABLE IF NOT EXISTS `biz_login_log` (
+                  `id` bigint NOT NULL AUTO_INCREMENT,
+                  `user_id` bigint DEFAULT NULL,
+                  `username` varchar(50) DEFAULT '' COMMENT '登录名',
+                  `login_ip` varchar(64) DEFAULT '' COMMENT '登录IP',
+                  `login_type` varchar(20) DEFAULT 'login' COMMENT 'login/logout',
+                  `code` int DEFAULT NULL COMMENT '状态码 20000成功 50000失败',
+                  `message` varchar(200) DEFAULT '' COMMENT '消息',
+                  `login_time` datetime DEFAULT NULL COMMENT '登录时间',
+                  `app_id` bigint DEFAULT NULL,
+                  `sys001` datetime DEFAULT NULL,
+                  `sys002` datetime DEFAULT NULL,
+                  `sys003` bigint DEFAULT NULL,
+                  `sys004` bigint DEFAULT NULL,
+                  `sys005` int DEFAULT 1,
+                  `sys006` varchar(64) DEFAULT '',
+                  `sys007` varchar(64) DEFAULT '',
+                  PRIMARY KEY (`id`),
+                  KEY `idx_user_id` (`user_id`),
+                  KEY `idx_login_time` (`login_time`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='应用登录日志表'
+                """);
+        return String.join(";\n\n", ddls) + ";";
     }
 
     /**
@@ -125,8 +510,17 @@ public class DataInitRunner implements ApplicationRunner {
                 // 菜单管理按钮
                 "(29, '菜单新增', 22, 1, '', '', 'F', 'system:menu:add', '', 1, NOW(), 1, 1, 'system'), " +
                 "(30, '菜单修改', 22, 2, '', '', 'F', 'system:menu:edit', '', 1, NOW(), 1, 1, 'system'), " +
-                "(31, '菜单删除', 22, 3, '', '', 'F', 'system:menu:remove', '', 1, NOW(), 1, 1, 'system')");
-        log.info("初始化资源权限数据完成(含系统管理菜单1-31)");
+                "(31, '菜单删除', 22, 3, '', '', 'F', 'system:menu:remove', '', 1, NOW(), 1, 1, 'system'), " +
+                // 仪表盘(Dashboard)菜单：分析页/工作台，首次登录落地 analytics
+                "(32, '仪表盘', 0, 0, '/dashboard', NULL, 'M', '', 'lucide:layout-dashboard', 1, NOW(), 1, 1, 'system'), " +
+                "(33, '分析页', 32, 1, '/dashboard/analytics', 'dashboard/analytics/index', 'M', '', 'lucide:area-chart', 1, NOW(), 1, 1, 'system'), " +
+                "(34, '工作台', 32, 2, '/dashboard/workspace', 'dashboard/workspace/index', 'M', '', 'carbon:workspace', 1, NOW(), 1, 1, 'system'), " +
+                // 应用管理菜单及按钮
+                "(35, '应用管理', 1, 13, '/system/app', 'system/app/index', 'M', 'system:app:list', 'ant-design:appstore-outlined', 1, NOW(), 1, 1, 'system'), " +
+                "(36, '应用新增', 35, 1, '', '', 'F', 'system:app:add', '', 1, NOW(), 1, 1, 'system'), " +
+                "(37, '应用修改', 35, 2, '', '', 'F', 'system:app:edit', '', 1, NOW(), 1, 1, 'system'), " +
+                "(38, '应用删除', 35, 3, '', '', 'F', 'system:app:remove', '', 1, NOW(), 1, 1, 'system')");
+        log.info("初始化资源权限数据完成(含系统管理菜单1-31、仪表盘32-34、应用管理35-38)");
     }
 
     private void initUser() {
@@ -152,13 +546,16 @@ public class DataInitRunner implements ApplicationRunner {
     }
 
     private void initRoleResource() {
-        // admin角色：拥有全部资源1-31(幂等，缺失的自动补齐)
+        // 清理历史重复授权行(唯一键缺失时期 initApps 每次启动都会重复插入)
+        jdbcTemplate.update("DELETE rr FROM sys_role_resource rr " +
+                "JOIN sys_role_resource rr2 ON rr.role_id = rr2.role_id AND rr.resource_id = rr2.resource_id AND rr.id > rr2.id");
+        // admin角色：拥有全部资源1-38(幂等，缺失的自动补齐)
         jdbcTemplate.update("INSERT INTO sys_role_resource (role_id, resource_id) " +
-                "SELECT 1, r.id FROM sys_resource r WHERE r.sys005 = 1 AND r.id BETWEEN 1 AND 31 " +
+                "SELECT 1, r.id FROM sys_resource r WHERE r.sys005 = 1 AND r.id BETWEEN 1 AND 38 " +
                 "AND NOT EXISTS (SELECT 1 FROM sys_role_resource x WHERE x.role_id = 1 AND x.resource_id = r.id)");
-        // user角色：系统管理/用户/角色/部门/字典基础菜单
+        // user角色：仪表盘/工作台/分析页 + 系统管理基础菜单
         jdbcTemplate.update("INSERT INTO sys_role_resource (role_id, resource_id) " +
-                "SELECT 2, r.id FROM sys_resource r WHERE r.sys005 = 1 AND r.id IN (1, 2, 3, 5, 6) " +
+                "SELECT 2, r.id FROM sys_resource r WHERE r.sys005 = 1 AND r.id IN (1, 2, 3, 5, 6, 32, 33, 34) " +
                 "AND NOT EXISTS (SELECT 1 FROM sys_role_resource x WHERE x.role_id = 2 AND x.resource_id = r.id)");
         log.info("初始化角色资源关联完成");
     }

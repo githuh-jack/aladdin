@@ -2,10 +2,15 @@ package com.aladdin.system.dao;
 
 import com.aladdin.common.db.base.BaseDao;
 import com.aladdin.system.entity.SysUserGroup;
-import org.apache.ibatis.annotations.Param;
-import org.apache.ibatis.annotations.Select;
+import com.mybatisflex.core.query.QueryColumn;
+import com.mybatisflex.core.query.QueryWrapper;
 
+import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
+
+import static com.aladdin.system.entity.table.SysResourceTableDef.SYS_RESOURCE;
+import static com.aladdin.system.entity.table.SysRoleTableDef.SYS_ROLE;
 
 /**
  * 用户组DAO
@@ -15,16 +20,35 @@ import java.util.Set;
  */
 public interface SysUserGroupDao extends BaseDao<SysUserGroup> {
 
-    @Select("SELECT r.role_key FROM sys_role r " +
-            "INNER JOIN sys_user_group_role ugr ON r.id = ugr.role_id " +
-            "INNER JOIN sys_user_group_user ugu ON ugr.group_id = ugu.group_id " +
-            "WHERE ugu.user_id = #{userId} AND r.sys005 = 1")
-    Set<String> selectRoleKeysByUserId(@Param("userId") Long userId);
+    /**
+     * 查询用户经用户组授予的角色 key(主表 sys005=1 由 flex 自动追加；关联表用字符串表名；Set 天然去重)
+     */
+    default Set<String> selectRoleKeysByUserId(Long userId) {
+        List<String> keys = selectListByQueryAs(QueryWrapper.create()
+                .select(SYS_ROLE.ROLE_KEY)
+                .from(SYS_ROLE)
+                .innerJoin("sys_user_group_role")
+                .on(SYS_ROLE.ID.eq(new QueryColumn("sys_user_group_role", "role_id")))
+                .innerJoin("sys_user_group_user")
+                .on(new QueryColumn("sys_user_group_role", "group_id").eq(new QueryColumn("sys_user_group_user", "group_id")))
+                .where(new QueryColumn("sys_user_group_user", "user_id").eq(userId)), String.class);
+        return keys == null ? new HashSet<>() : new HashSet<>(keys);
+    }
 
-    @Select("SELECT res.perms FROM sys_resource res " +
-            "INNER JOIN sys_role_resource rr ON res.id = rr.resource_id " +
-            "INNER JOIN sys_user_group_role ugr ON rr.role_id = ugr.role_id " +
-            "INNER JOIN sys_user_group_user ugu ON ugr.group_id = ugu.group_id " +
-            "WHERE ugu.user_id = #{userId} AND res.sys005 = 1")
-    Set<String> selectPermsByUserId(@Param("userId") Long userId);
+    /**
+     * 查询用户经用户组授予的权限标识(主表 sys005=1 由 flex 自动追加；关联表用字符串表名；Set 天然去重)
+     */
+    default Set<String> selectPermsByUserId(Long userId) {
+        List<String> perms = selectListByQueryAs(QueryWrapper.create()
+                .select(SYS_RESOURCE.PERMS)
+                .from(SYS_RESOURCE)
+                .innerJoin("sys_role_resource")
+                .on(SYS_RESOURCE.ID.eq(new QueryColumn("sys_role_resource", "resource_id")))
+                .innerJoin("sys_user_group_role")
+                .on(new QueryColumn("sys_role_resource", "role_id").eq(new QueryColumn("sys_user_group_role", "role_id")))
+                .innerJoin("sys_user_group_user")
+                .on(new QueryColumn("sys_user_group_role", "group_id").eq(new QueryColumn("sys_user_group_user", "group_id")))
+                .where(new QueryColumn("sys_user_group_user", "user_id").eq(userId)), String.class);
+        return perms == null ? new HashSet<>() : new HashSet<>(perms);
+    }
 }

@@ -2,7 +2,7 @@ package com.aladdin.common.security.service;
 
 import com.aladdin.common.core.constant.RedisKeyConstant;
 import com.aladdin.common.security.config.SecurityProperties;
-import com.aladdin.common.security.redis.RedisService;
+import com.aladdin.common.redis.RedisService;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;

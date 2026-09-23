@@ -1,6 +1,6 @@
 package com.aladdin.common.security.service;
 
-import com.aladdin.common.security.redis.RedisService;
+import com.aladdin.common.redis.RedisService;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;

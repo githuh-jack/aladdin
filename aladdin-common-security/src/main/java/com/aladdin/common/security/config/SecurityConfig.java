@@ -2,7 +2,7 @@ package com.aladdin.common.security.config;
 
 import com.aladdin.common.security.filter.IpListFilter;
 import com.aladdin.common.security.filter.JwtAuthenticationFilter;
-import com.aladdin.common.security.redis.RedisService;
+import com.aladdin.common.redis.RedisService;
 import com.aladdin.common.security.service.SecurityUserDetailsService;
 import com.aladdin.common.security.service.TokenService;
 import com.aladdin.common.security.tenant.TenantContextFilter;

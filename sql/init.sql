@@ -33,9 +33,11 @@ CREATE TABLE IF NOT EXISTS `sys_user` (
   `username` varchar(50) NOT NULL,
   `password` varchar(200) NOT NULL,
   `nickname` varchar(50) DEFAULT '',
+  `real_name` varchar(50) DEFAULT '' COMMENT '姓名',
   `email` varchar(50) DEFAULT '',
   `phone` varchar(20) DEFAULT '',
   `avatar` varchar(200) DEFAULT '',
+  `invite_code` varchar(16) DEFAULT '' COMMENT '注册时填写的邀请码',
   `dept_id` bigint DEFAULT NULL,
   `tenant_id` bigint DEFAULT NULL COMMENT '租户ID',
   `status` int DEFAULT 1,
@@ -117,7 +119,7 @@ CREATE TABLE IF NOT EXISTS `sys_role_resource` (
   `role_id` bigint NOT NULL,
   `resource_id` bigint NOT NULL,
   PRIMARY KEY (`id`),
-  KEY `idx_role_id` (`role_id`),
+  UNIQUE KEY `uk_role_resource` (`role_id`, `resource_id`),
   KEY `idx_resource_id` (`resource_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -414,6 +416,29 @@ CREATE TABLE IF NOT EXISTS `sys_menu` (
   KEY `idx_parent_id` (`parent_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统默认菜单表';
 
+-- ==============================
+-- 表：应用
+-- ==============================
+CREATE TABLE IF NOT EXISTS `sys_app` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `app_name` varchar(100) NOT NULL COMMENT '应用名称',
+  `app_code` varchar(50) NOT NULL COMMENT '应用编码',
+  `description` varchar(500) DEFAULT '' COMMENT '应用描述',
+  `allow_register` int DEFAULT 1 COMMENT '是否准许注册 0否 1是',
+  `dept_id` bigint DEFAULT NULL COMMENT '关联根部门ID',
+  `status` int DEFAULT 1,
+  `tenant_id` bigint DEFAULT NULL,
+  `sys001` datetime DEFAULT NULL,
+  `sys002` datetime DEFAULT NULL,
+  `sys003` bigint DEFAULT NULL,
+  `sys004` bigint DEFAULT NULL,
+  `sys005` int DEFAULT 1,
+  `sys006` varchar(64) DEFAULT '',
+  `sys007` varchar(64) DEFAULT '',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_app_code` (`app_code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='应用表';
+
 -- ================================================================
 -- 初始数据
 -- ================================================================
@@ -484,7 +509,16 @@ INSERT INTO `sys_resource` (`id`, `resource_name`, `parent_id`, `sort`, `path`, 
 -- 菜单管理按钮
 (29, '菜单新增', 22, 1, '', '', 'F', 'system:menu:add', '', 1, NOW(), 1, 1, 'system'),
 (30, '菜单修改', 22, 2, '', '', 'F', 'system:menu:edit', '', 1, NOW(), 1, 1, 'system'),
-(31, '菜单删除', 22, 3, '', '', 'F', 'system:menu:remove', '', 1, NOW(), 1, 1, 'system');
+(31, '菜单删除', 22, 3, '', '', 'F', 'system:menu:remove', '', 1, NOW(), 1, 1, 'system'),
+-- 仪表盘(Dashboard)菜单：分析页/工作台，首次登录落地 analytics
+(32, '仪表盘', 0, 0, '/dashboard', NULL, 'M', '', 'lucide:layout-dashboard', 1, NOW(), 1, 1, 'system'),
+(33, '分析页', 32, 1, '/dashboard/analytics', 'dashboard/analytics/index', 'M', '', 'lucide:area-chart', 1, NOW(), 1, 1, 'system'),
+(34, '工作台', 32, 2, '/dashboard/workspace', 'dashboard/workspace/index', 'M', '', 'carbon:workspace', 1, NOW(), 1, 1, 'system'),
+-- 应用管理菜单及按钮
+(35, '应用管理', 1, 13, '/system/app', 'system/app/index', 'M', 'system:app:list', 'ant-design:appstore-outlined', 1, NOW(), 1, 1, 'system'),
+(36, '应用新增', 35, 1, '', '', 'F', 'system:app:add', '', 1, NOW(), 1, 1, 'system'),
+(37, '应用修改', 35, 2, '', '', 'F', 'system:app:edit', '', 1, NOW(), 1, 1, 'system'),
+(38, '应用删除', 35, 3, '', '', 'F', 'system:app:remove', '', 1, NOW(), 1, 1, 'system');
 
 -- ==============================
 -- 数据：用户-角色关联
@@ -501,8 +535,9 @@ INSERT INTO `sys_role_resource` (`role_id`, `resource_id`) VALUES
 (1, 7), (1, 8), (1, 9), (1, 10), (1, 11), (1, 12), (1, 13), (1, 14), (1, 15),
 (1, 16), (1, 17), (1, 18), (1, 19), (1, 20), (1, 21),
 (1, 22), (1, 23), (1, 24), (1, 25), (1, 26), (1, 27), (1, 28),
-(1, 29), (1, 30), (1, 31),
-(2, 1), (2, 2), (2, 3), (2, 5), (2, 6);
+(1, 29), (1, 30), (1, 31), (1, 32), (1, 33), (1, 34),
+(1, 35), (1, 36), (1, 37), (1, 38),
+(2, 1), (2, 2), (2, 3), (2, 5), (2, 6), (2, 32), (2, 33), (2, 34);
 
 -- ==============================
 -- 数据：字典类型
@@ -602,3 +637,9 @@ INSERT INTO `sys_menu` (`id`, `parent_id`, `menu_name`, `title`, `icon`, `path`,
 (110, 100, 'SystemRoleResource', 'page.system.roleResource', 'lucide:boxes', '/system/role-resource', '/system/role-resource/index', 10, 0, 0, '', '', 1, NOW(), 1, 1, 'system'),
 (111, 100, 'SystemOperLog', 'page.system.operLog', 'lucide:file-clock', '/system/oper-log', '/system/oper-log/index', 11, 0, 0, '', '', 1, NOW(), 1, 1, 'system'),
 (112, 100, 'SystemLoginLog', 'page.system.loginLog', 'lucide:log-in', '/system/login-log', '/system/login-log/index', 12, 0, 0, '', '', 1, NOW(), 1, 1, 'system');
+
+-- ==============================
+-- 数据：应用(传信纸船)
+-- ==============================
+INSERT INTO `sys_app` (`id`, `app_name`, `app_code`, `description`, `allow_register`, `status`, `sys001`, `sys003`, `sys005`, `sys006`) VALUES
+(1, '传信纸船', 'paper_boat', '阿拉丁传信纸船应用', 1, 1, NOW(), 1, 1, 'system');
