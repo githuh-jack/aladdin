@@ -27,8 +27,8 @@ public interface BizLetterDao extends BaseDao<BizLetter> {
      */
     @Select("<script>" +
             "SELECT l.*, u.nickname AS receiver_name FROM biz_letter l " +
-            "LEFT JOIN sys_user u ON l.receiver_id = u.id " +
-            "WHERE l.sys005 = 1 AND l.sender_id = #{senderId} " +
+            "LEFT JOIN biz_user u ON l.receiver_id = u.id " +
+            "WHERE l.sys005 = 1 AND l.sender_id = #{senderId} AND l.status != 3 " +
             "<if test='status != null'>AND l.status = #{status} </if>" +
             "ORDER BY l.id DESC LIMIT #{limit} OFFSET #{offset}" +
             "</script>")
@@ -38,25 +38,49 @@ public interface BizLetterDao extends BaseDao<BizLetter> {
                                    @Param("limit") int limit);
 
     /**
-     * 查询收件箱(带发件人昵称)
+     * 查询收件箱(带发件人昵称，只显示已过到达时间的信件)
      */
     @Select("<script>" +
             "SELECT l.*, u.nickname AS sender_name FROM biz_letter l " +
-            "LEFT JOIN sys_user u ON l.sender_id = u.id " +
-            "WHERE l.sys005 = 1 AND l.receiver_id = #{receiverId} " +
+            "LEFT JOIN biz_user u ON l.sender_id = u.id " +
+            "WHERE l.sys005 = 1 AND l.receiver_id = #{receiverId} AND l.status != 3 " +
+            "AND (l.arrival_time IS NULL OR l.arrival_time &lt;= NOW()) " +
             "<if test='status != null'>AND l.status = #{status} </if>" +
-            "ORDER BY l.id DESC LIMIT #{limit} OFFSET #{offset}" +
+            "ORDER BY (CASE WHEN l.status = 1 THEN 0 ELSE 1 END), l.id DESC LIMIT #{limit} OFFSET #{offset}" +
             "</script>")
     List<BizLetter> selectInboxList(@Param("receiverId") Long receiverId,
                                     @Param("status") Integer status,
                                     @Param("offset") int offset,
                                     @Param("limit") int limit);
 
+    /**
+     * 信箱全部：收到的(仅已到达)+寄出的，未读置前
+     */
+    @Select("SELECT * FROM (" +
+            "SELECT l.*, su.nickname AS sender_name, ru.nickname AS receiver_name, 1 AS box_recv " +
+            "FROM biz_letter l " +
+            "LEFT JOIN biz_user su ON l.sender_id = su.id " +
+            "LEFT JOIN biz_user ru ON l.receiver_id = ru.id " +
+            "WHERE l.sys005 = 1 AND l.receiver_id = #{userId} AND l.status != 3 " +
+            "AND (l.arrival_time IS NULL OR l.arrival_time <= NOW()) " +
+            "UNION ALL " +
+            "SELECT l.*, su.nickname AS sender_name, ru.nickname AS receiver_name, 0 AS box_recv " +
+            "FROM biz_letter l " +
+            "LEFT JOIN biz_user su ON l.sender_id = su.id " +
+            "LEFT JOIN biz_user ru ON l.receiver_id = ru.id " +
+            "WHERE l.sys005 = 1 AND l.sender_id = #{userId} AND l.status != 3 " +
+            ") t " +
+            "ORDER BY (CASE WHEN t.box_recv = 1 AND t.status = 1 THEN 0 ELSE 1 END), t.send_time DESC, t.id DESC " +
+            "LIMIT #{limit} OFFSET #{offset}")
+    List<BizLetter> selectBoxList(@Param("userId") Long userId,
+                                  @Param("offset") int offset,
+                                  @Param("limit") int limit);
+
     @Select("SELECT l.*, su.nickname AS sender_name, ru.nickname AS receiver_name, " +
             "s.name AS stamp_name, e.name AS envelope_name " +
             "FROM biz_letter l " +
-            "LEFT JOIN sys_user su ON l.sender_id = su.id " +
-            "LEFT JOIN sys_user ru ON l.receiver_id = ru.id " +
+            "LEFT JOIN biz_user su ON l.sender_id = su.id " +
+            "LEFT JOIN biz_user ru ON l.receiver_id = ru.id " +
             "LEFT JOIN biz_stamp s ON l.stamp_id = s.id " +
             "LEFT JOIN biz_envelope e ON l.envelope_id = e.id " +
             "WHERE l.id = #{id} AND l.sys005 = 1")
@@ -71,7 +95,7 @@ public interface BizLetterDao extends BaseDao<BizLetter> {
     @Select("SELECT su.id AS user_id, su.nickname AS sender_name, " +
             "CASE WHEN p.avatar_status = 2 THEN p.avatar_url ELSE NULL END AS avatar_url " +
             "FROM biz_letter l " +
-            "LEFT JOIN sys_user su ON l.sender_id = su.id " +
+            "LEFT JOIN biz_user su ON l.sender_id = su.id " +
             "LEFT JOIN biz_user_profile p ON p.user_id = su.id " +
             "WHERE l.sys005 = 1 AND l.status = 1 AND l.sender_id IS NOT NULL AND su.sys005 = 1 " +
             "GROUP BY su.id, su.nickname, p.avatar_url " +
@@ -81,7 +105,7 @@ public interface BizLetterDao extends BaseDao<BizLetter> {
     /**
      * 随机挑选一位可寄送的用户(排除自己、禁用用户及拉黑我的人)
      */
-    @Select("SELECT u.id FROM sys_user u " +
+    @Select("SELECT u.id FROM biz_user u " +
             "WHERE u.sys005 = 1 AND u.status = 1 AND u.id != #{userId} " +
             "AND u.id NOT IN (SELECT friend_id FROM biz_friend WHERE sys005 = 1 AND user_id = #{userId} AND status = 4) " +
             "ORDER BY RAND() LIMIT 1")
@@ -94,8 +118,8 @@ public interface BizLetterDao extends BaseDao<BizLetter> {
             "SELECT l.*, su.nickname AS sender_name, ru.nickname AS receiver_name, " +
             "s.name AS stamp_name, e.name AS envelope_name " +
             "FROM biz_letter l " +
-            "LEFT JOIN sys_user su ON l.sender_id = su.id " +
-            "LEFT JOIN sys_user ru ON l.receiver_id = ru.id " +
+            "LEFT JOIN biz_user su ON l.sender_id = su.id " +
+            "LEFT JOIN biz_user ru ON l.receiver_id = ru.id " +
             "LEFT JOIN biz_stamp s ON l.stamp_id = s.id " +
             "LEFT JOIN biz_envelope e ON l.envelope_id = e.id " +
             "WHERE l.sys005 = 1 " +

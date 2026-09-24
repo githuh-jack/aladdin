@@ -21,7 +21,7 @@ public interface BizNoteDao extends BaseDao<BizNote> {
 
     @Select("SELECT n.*, u.nickname AS user_name, " + INTERACT_SELECT +
             "0 AS liked FROM biz_note n " +
-            "LEFT JOIN sys_user u ON n.user_id = u.id " +
+            "LEFT JOIN biz_user u ON n.user_id = u.id " +
             "WHERE n.id = #{id} AND n.sys005 = 1")
     BizNote selectDetailById(@Param("id") Long id);
 
@@ -32,7 +32,7 @@ public interface BizNoteDao extends BaseDao<BizNote> {
             "</if>" +
             "<if test='viewerId == null'>0 AS liked </if>" +
             "FROM biz_note n " +
-            "LEFT JOIN sys_user u ON n.user_id = u.id " +
+            "LEFT JOIN biz_user u ON n.user_id = u.id " +
             "WHERE n.sys005 = 1 " +
             "<if test='userId != null'>AND n.user_id = #{userId} </if>" +
             "<if test='isPublic != null'>AND n.is_public = #{isPublic} </if>" +

@@ -13,12 +13,6 @@ import com.aladdin.common.redis.RedisService;
 import com.aladdin.common.security.service.LoginUserDetails;
 import com.aladdin.common.security.service.SecurityUserDetailsService;
 import com.aladdin.common.security.service.TokenService;
-import com.aladdin.system.entity.SysApp;
-import com.aladdin.system.entity.SysRole;
-import com.aladdin.system.entity.SysUser;
-import com.aladdin.system.service.SysAppService;
-import com.aladdin.system.service.SysRoleService;
-import com.aladdin.system.service.SysUserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -27,7 +21,6 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -70,88 +63,7 @@ public class AuthController {
     private SecurityProperties securityProperties;
 
     @Autowired
-    private SysUserService sysUserService;
-
-    @Autowired
-    private SysRoleService sysRoleService;
-
-    @Autowired
-    private SysAppService sysAppService;
-
-    @Autowired
-    private PasswordEncoder passwordEncoder;
-
-    @Autowired
     private SecurityUserDetailsService userDetailsService;
-
-    /**
-     * 用户注册（简化版）
-     * 入参：username / password / nickname（笔名，必填） / email（可选） / inviteCode（可选）
-     * 流程：校验用户名是否重复 -> 加密密码 -> 入库 -> 绑定"普通用户"角色
-     */
-    @PostMapping("/register")
-    public R<Map<String, Object>> register(@RequestBody Map<String, String> body) {
-        String username = body.get("username");
-        String password = body.get("password");
-        String nickname = body.get("nickname");
-        String email = body.get("email");
-        String inviteCode = body.get("inviteCode");
-        if (username == null || username.trim().isEmpty()
-                || password == null || password.trim().isEmpty()) {
-            return R.fail(GlobalErrorCode.BAD_REQUEST);
-        }
-        if (username.length() < 3 || username.length() > 30) {
-            return R.fail(GlobalErrorCode.BAD_REQUEST.getCode(), "用户名长度需在3-30之间");
-        }
-        if (password.length() < 6 || password.length() > 50) {
-            return R.fail(GlobalErrorCode.BAD_REQUEST.getCode(), "密码长度需在6-50之间");
-        }
-        if (nickname == null || nickname.trim().isEmpty()) {
-            return R.fail(GlobalErrorCode.BAD_REQUEST.getCode(), "笔名不能为空");
-        }
-        if (nickname.trim().length() > 30) {
-            return R.fail(GlobalErrorCode.BAD_REQUEST.getCode(), "笔名最多30个字符");
-        }
-        // 邀请码可选填：填写时仅校验格式
-        if (inviteCode != null && !inviteCode.trim().isEmpty()
-                && !inviteCode.trim().matches("[A-Za-z0-9]{4,16}")) {
-            return R.fail(GlobalErrorCode.BAD_REQUEST.getCode(), "邀请码需为4-16位字母或数字");
-        }
-        if (sysUserService.getByUsername(username) != null) {
-            return R.fail(GlobalErrorCode.DATA_DUPLICATE.getCode(), "用户名已存在");
-        }
-        // 应用注册开关：传信纸船应用关闭注册时禁止注册
-        SysApp paperBoat = sysAppService.getByAppCode("paper_boat");
-        if (paperBoat != null && paperBoat.getAllowRegister() != null && paperBoat.getAllowRegister() == 0) {
-            return R.fail(GlobalErrorCode.BAD_REQUEST.getCode(), "当前应用未开放注册");
-        }
-        SysUser user = new SysUser();
-        user.setUsername(username);
-        user.setPassword(passwordEncoder.encode(password));
-        user.setNickname(nickname.trim());
-        user.setInviteCode(inviteCode == null ? "" : inviteCode.trim().toUpperCase());
-        user.setEmail(email == null ? "" : email);
-        user.setPhone("");
-        user.setAvatar("");
-        user.setStatus(1);
-        user.setPwdForceChange(0);
-        user.setTenantId(1L);
-        user.setDeptId(2L);
-        boolean ok = sysUserService.save(user);
-        if (!ok) {
-            return R.fail("注册失败");
-        }
-        // 绑定默认"普通用户"角色(role_key='user')
-        SysRole userRole = sysRoleService.getRoleByKey("user");
-        if (userRole != null) {
-            sysRoleService.assignRoles(user.getId(), java.util.Collections.singletonList(userRole.getId()));
-        }
-        log.info("用户注册成功: {}", username);
-        Map<String, Object> data = new HashMap<>();
-        data.put("id", user.getId());
-        data.put("username", user.getUsername());
-        return R.ok("注册成功", data);
-    }
 
     @PostMapping("/login")
     public R<Map<String, Object>> login(@RequestBody Map<String, String> loginBody) {

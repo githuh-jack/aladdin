@@ -142,6 +142,7 @@ public class DataInitRunner implements ApplicationRunner {
                   `phone` varchar(20) DEFAULT '',
                   `avatar` varchar(200) DEFAULT '',
                   `invite_code` varchar(16) DEFAULT '' COMMENT '注册时填写的邀请码',
+                  `user_no` bigint DEFAULT NULL COMMENT '用户唯一编号(6位,从101322起,邮寄信件凭编号)',
                   `coins` int DEFAULT 0 COMMENT '铜钱余额(文)',
                   `credit_score` int DEFAULT 100 COMMENT '信用分',
                   `status` int DEFAULT 1,
@@ -154,17 +155,18 @@ public class DataInitRunner implements ApplicationRunner {
                   `sys006` varchar(64) DEFAULT '',
                   `sys007` varchar(64) DEFAULT '',
                   PRIMARY KEY (`id`),
-                  UNIQUE KEY `uk_username` (`username`)
+                  UNIQUE KEY `uk_username` (`username`),
+                  UNIQUE KEY `uk_user_no` (`user_no`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='应用用户表'
                 """,
                 """
                 CREATE TABLE IF NOT EXISTS `biz_friend` (
                   `id` bigint NOT NULL AUTO_INCREMENT,
-                  `user_id` bigint NOT NULL COMMENT '用户ID',
-                  `friend_user_id` bigint NOT NULL COMMENT '好友用户ID',
-                  `apply_message` varchar(200) DEFAULT '' COMMENT '申请留言',
-                  `status` int DEFAULT 0 COMMENT '0申请中 1已通过 2已拒绝 3已拉黑',
-                  `app_id` bigint DEFAULT NULL,
+                  `user_id` bigint NOT NULL COMMENT '发起方ID',
+                  `friend_id` bigint NOT NULL COMMENT '被加方ID',
+                  `status` int DEFAULT 0 COMMENT '0申请中 1已通过 2已拒绝 3已删除 4已拉黑',
+                  `apply_remark` varchar(200) DEFAULT '' COMMENT '申请备注',
+                  `add_time` datetime DEFAULT NULL COMMENT '通过时间',
                   `sys001` datetime DEFAULT NULL,
                   `sys002` datetime DEFAULT NULL,
                   `sys003` bigint DEFAULT NULL,
@@ -173,20 +175,24 @@ public class DataInitRunner implements ApplicationRunner {
                   `sys006` varchar(64) DEFAULT '',
                   `sys007` varchar(64) DEFAULT '',
                   PRIMARY KEY (`id`),
-                  UNIQUE KEY `uk_user_friend` (`user_id`, `friend_user_id`)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='好友表'
+                  KEY `idx_user_id` (`user_id`),
+                  KEY `idx_friend_id` (`friend_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='好友关系'
                 """,
                 """
                 CREATE TABLE IF NOT EXISTS `biz_letter` (
                   `id` bigint NOT NULL AUTO_INCREMENT,
                   `sender_id` bigint NOT NULL COMMENT '发信人ID',
-                  `receiver_id` bigint DEFAULT NULL COMMENT '收信人ID(广场信为空)',
-                  `content` text COMMENT '信件内容',
-                  `letter_type` int DEFAULT 1 COMMENT '1私人信 2广场信',
-                  `coin_cost` int DEFAULT 0 COMMENT '耗用邮票(文)',
-                  `status` int DEFAULT 1 COMMENT '0已撤回 1正常',
-                  `send_time` datetime DEFAULT NULL,
-                  `app_id` bigint DEFAULT NULL,
+                  `receiver_id` bigint DEFAULT NULL COMMENT '收信人ID(地址信件时为空)',
+                  `receiver_address` varchar(200) DEFAULT '' COMMENT '收件地址(寄给非好友时填写)',
+                  `title` varchar(200) DEFAULT '' COMMENT '标题(可不填)',
+                  `content` text,
+                  `status` int DEFAULT 0 COMMENT '0草稿 1已发送 2已读 3已删除',
+                  `stamp_id` bigint DEFAULT NULL COMMENT '使用的邮票ID',
+                  `envelope_id` bigint DEFAULT NULL COMMENT '使用的信封ID',
+                  `send_time` datetime DEFAULT NULL COMMENT '发送时间',
+                  `read_time` datetime DEFAULT NULL COMMENT '阅读时间',
+                  `arrival_time` datetime DEFAULT NULL COMMENT '到达时间(寄出时间+邮票送达天数，未到时间收件人不可见)',
                   `sys001` datetime DEFAULT NULL,
                   `sys002` datetime DEFAULT NULL,
                   `sys003` bigint DEFAULT NULL,
@@ -195,110 +201,20 @@ public class DataInitRunner implements ApplicationRunner {
                   `sys006` varchar(64) DEFAULT '',
                   `sys007` varchar(64) DEFAULT '',
                   PRIMARY KEY (`id`),
-                  KEY `idx_sender` (`sender_id`),
-                  KEY `idx_receiver` (`receiver_id`)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='信件表'
+                  KEY `idx_sender_id` (`sender_id`),
+                  KEY `idx_receiver_id` (`receiver_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='信件'
                 """,
                 """
                 CREATE TABLE IF NOT EXISTS `biz_diary` (
                   `id` bigint NOT NULL AUTO_INCREMENT,
                   `user_id` bigint NOT NULL,
-                  `diary_date` date NOT NULL COMMENT '日记日期',
-                  `content` text COMMENT '日记内容',
+                  `title` varchar(200) DEFAULT '',
+                  `content` text,
+                  `weather` varchar(20) DEFAULT '' COMMENT '天气',
                   `mood` varchar(20) DEFAULT '' COMMENT '心情',
-                  `app_id` bigint DEFAULT NULL,
-                  `sys001` datetime DEFAULT NULL,
-                  `sys002` datetime DEFAULT NULL,
-                  `sys003` bigint DEFAULT NULL,
-                  `sys004` bigint DEFAULT NULL,
-                  `sys005` int DEFAULT 1,
-                  `sys006` varchar(64) DEFAULT '',
-                  `sys007` varchar(64) DEFAULT '',
-                  PRIMARY KEY (`id`),
-                  KEY `idx_user_date` (`user_id`, `diary_date`)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='日记表'
-                """,
-                """
-                CREATE TABLE IF NOT EXISTS `biz_feeling` (
-                  `id` bigint NOT NULL AUTO_INCREMENT,
-                  `user_id` bigint NOT NULL,
-                  `letter_id` bigint DEFAULT NULL COMMENT '关联信件ID',
-                  `content` text COMMENT '感想内容',
-                  `app_id` bigint DEFAULT NULL,
-                  `sys001` datetime DEFAULT NULL,
-                  `sys002` datetime DEFAULT NULL,
-                  `sys003` bigint DEFAULT NULL,
-                  `sys004` bigint DEFAULT NULL,
-                  `sys005` int DEFAULT 1,
-                  `sys006` varchar(64) DEFAULT '',
-                  `sys007` varchar(64) DEFAULT '',
-                  PRIMARY KEY (`id`)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='感想表'
-                """,
-                """
-                CREATE TABLE IF NOT EXISTS `biz_note` (
-                  `id` bigint NOT NULL AUTO_INCREMENT,
-                  `user_id` bigint NOT NULL,
-                  `title` varchar(100) DEFAULT '' COMMENT '笔记标题',
-                  `content` text COMMENT '笔记内容',
-                  `app_id` bigint DEFAULT NULL,
-                  `sys001` datetime DEFAULT NULL,
-                  `sys002` datetime DEFAULT NULL,
-                  `sys003` bigint DEFAULT NULL,
-                  `sys004` bigint DEFAULT NULL,
-                  `sys005` int DEFAULT 1,
-                  `sys006` varchar(64) DEFAULT '',
-                  `sys007` varchar(64) DEFAULT '',
-                  PRIMARY KEY (`id`)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='笔记表'
-                """,
-                """
-                CREATE TABLE IF NOT EXISTS `biz_stamp` (
-                  `id` bigint NOT NULL AUTO_INCREMENT,
-                  `user_id` bigint NOT NULL,
-                  `stamp_name` varchar(100) DEFAULT '' COMMENT '邮票名称',
-                  `price` int DEFAULT 30 COMMENT '单价(文)',
-                  `image` varchar(200) DEFAULT '',
-                  `status` int DEFAULT 1,
-                  `app_id` bigint DEFAULT NULL,
-                  `sys001` datetime DEFAULT NULL,
-                  `sys002` datetime DEFAULT NULL,
-                  `sys003` bigint DEFAULT NULL,
-                  `sys004` bigint DEFAULT NULL,
-                  `sys005` int DEFAULT 1,
-                  `sys006` varchar(64) DEFAULT '',
-                  `sys007` varchar(64) DEFAULT '',
-                  PRIMARY KEY (`id`)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='邮票表'
-                """,
-                """
-                CREATE TABLE IF NOT EXISTS `biz_envelope` (
-                  `id` bigint NOT NULL AUTO_INCREMENT,
-                  `user_id` bigint NOT NULL,
-                  `envelope_name` varchar(100) DEFAULT '' COMMENT '信封名称',
-                  `image` varchar(200) DEFAULT '',
-                  `status` int DEFAULT 1,
-                  `app_id` bigint DEFAULT NULL,
-                  `sys001` datetime DEFAULT NULL,
-                  `sys002` datetime DEFAULT NULL,
-                  `sys003` bigint DEFAULT NULL,
-                  `sys004` bigint DEFAULT NULL,
-                  `sys005` int DEFAULT 1,
-                  `sys006` varchar(64) DEFAULT '',
-                  `sys007` varchar(64) DEFAULT '',
-                  PRIMARY KEY (`id`)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='信封表'
-                """,
-                """
-                CREATE TABLE IF NOT EXISTS `biz_coin_log` (
-                  `id` bigint NOT NULL AUTO_INCREMENT,
-                  `user_id` bigint NOT NULL,
-                  `change_type` varchar(50) NOT NULL COMMENT '变动类型(register/daily_login/checkin/first_letter等)',
-                  `change_amount` int NOT NULL COMMENT '变动数量(正加负减)',
-                  `balance` int DEFAULT 0 COMMENT '变动后余额',
-                  `related_id` bigint DEFAULT NULL COMMENT '关联业务ID',
-                  `remark` varchar(200) DEFAULT '' COMMENT '备注',
-                  `app_id` bigint DEFAULT NULL,
+                  `write_date` date DEFAULT NULL COMMENT '日记日期',
+                  `is_public` int DEFAULT 0 COMMENT '0私密 1公开',
                   `sys001` datetime DEFAULT NULL,
                   `sys002` datetime DEFAULT NULL,
                   `sys003` bigint DEFAULT NULL,
@@ -308,7 +224,133 @@ public class DataInitRunner implements ApplicationRunner {
                   `sys007` varchar(64) DEFAULT '',
                   PRIMARY KEY (`id`),
                   KEY `idx_user_id` (`user_id`)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='铜钱流水表'
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='日记'
+                """,
+                """
+                CREATE TABLE IF NOT EXISTS `biz_note` (
+                  `id` bigint NOT NULL AUTO_INCREMENT,
+                  `user_id` bigint NOT NULL,
+                  `title` varchar(200) DEFAULT '',
+                  `content` text,
+                  `note_type` varchar(30) DEFAULT '其他' COMMENT '笔记分类',
+                  `is_public` int DEFAULT 0,
+                  `sys001` datetime DEFAULT NULL,
+                  `sys002` datetime DEFAULT NULL,
+                  `sys003` bigint DEFAULT NULL,
+                  `sys004` bigint DEFAULT NULL,
+                  `sys005` int DEFAULT 1,
+                  `sys006` varchar(64) DEFAULT '',
+                  `sys007` varchar(64) DEFAULT '',
+                  PRIMARY KEY (`id`),
+                  KEY `idx_user_id` (`user_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='其他笔记'
+                """,
+                """
+                CREATE TABLE IF NOT EXISTS `biz_stamp` (
+                  `id` bigint NOT NULL AUTO_INCREMENT,
+                  `name` varchar(100) NOT NULL,
+                  `description` varchar(500) DEFAULT '',
+                  `image_url` varchar(500) DEFAULT '',
+                  `price` int NOT NULL DEFAULT 0 COMMENT '铜钱单价',
+                  `stock` int DEFAULT 0 COMMENT '库存, -1不限',
+                  `stamp_type` varchar(20) DEFAULT '普通' COMMENT '普通/稀有/限量',
+                  `theme` varchar(50) DEFAULT '经典' COMMENT '邮票主题(收藏分类)',
+                  `series` varchar(100) DEFAULT '' COMMENT '套系主题(空为散票)',
+                  `delivery_days` int DEFAULT 3 COMMENT '默认送达时间(天)',
+                  `status` int DEFAULT 1 COMMENT '0下架 1上架',
+                  `sys001` datetime DEFAULT NULL,
+                  `sys002` datetime DEFAULT NULL,
+                  `sys003` bigint DEFAULT NULL,
+                  `sys004` bigint DEFAULT NULL,
+                  `sys005` int DEFAULT 1,
+                  `sys006` varchar(64) DEFAULT '',
+                  `sys007` varchar(64) DEFAULT '',
+                  PRIMARY KEY (`id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='邮票'
+                """,
+                """
+                CREATE TABLE IF NOT EXISTS `biz_user_stamp_item` (
+                  `id` bigint NOT NULL AUTO_INCREMENT,
+                  `user_id` bigint NOT NULL,
+                  `stamp_id` bigint NOT NULL COMMENT '邮票模板ID',
+                  `code` varchar(32) DEFAULT NULL COMMENT '邮票唯一编码(ST+12位序号，不对外展示)',
+                  `status` int DEFAULT 1 COMMENT '1未使用 2已使用',
+                  `used_time` datetime DEFAULT NULL COMMENT '使用时间',
+                  `letter_id` bigint DEFAULT NULL COMMENT '消耗该邮票的信件ID',
+                  `sys001` datetime DEFAULT NULL,
+                  `sys002` datetime DEFAULT NULL,
+                  `sys003` bigint DEFAULT NULL,
+                  `sys004` bigint DEFAULT NULL,
+                  `sys005` int DEFAULT 1,
+                  `sys006` varchar(64) DEFAULT '',
+                  `sys007` varchar(64) DEFAULT '',
+                  PRIMARY KEY (`id`),
+                  UNIQUE KEY `uk_code` (`code`),
+                  KEY `idx_user_id` (`user_id`),
+                  KEY `idx_stamp_id` (`stamp_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户邮票实例(一票一行)'
+                """,
+                """
+                CREATE TABLE IF NOT EXISTS `biz_envelope` (
+                  `id` bigint NOT NULL AUTO_INCREMENT,
+                  `name` varchar(100) NOT NULL,
+                  `description` varchar(500) DEFAULT '',
+                  `image_url` varchar(500) DEFAULT '',
+                  `price` int NOT NULL DEFAULT 0,
+                  `stock` int DEFAULT 0,
+                  `envelope_type` varchar(20) DEFAULT '普通',
+                  `status` int DEFAULT 1,
+                  `sys001` datetime DEFAULT NULL,
+                  `sys002` datetime DEFAULT NULL,
+                  `sys003` bigint DEFAULT NULL,
+                  `sys004` bigint DEFAULT NULL,
+                  `sys005` int DEFAULT 1,
+                  `sys006` varchar(64) DEFAULT '',
+                  `sys007` varchar(64) DEFAULT '',
+                  PRIMARY KEY (`id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='信封'
+                """,
+                """
+                CREATE TABLE IF NOT EXISTS `biz_user_envelope_item` (
+                  `id` bigint NOT NULL AUTO_INCREMENT,
+                  `user_id` bigint NOT NULL,
+                  `envelope_id` bigint NOT NULL COMMENT '信封模板ID',
+                  `code` varchar(32) DEFAULT NULL COMMENT '信封唯一编码(EN+12位序号，不对外展示)',
+                  `status` int DEFAULT 1 COMMENT '1未使用 2已使用',
+                  `used_time` datetime DEFAULT NULL COMMENT '使用时间',
+                  `letter_id` bigint DEFAULT NULL COMMENT '消耗该信封的信件ID',
+                  `sys001` datetime DEFAULT NULL,
+                  `sys002` datetime DEFAULT NULL,
+                  `sys003` bigint DEFAULT NULL,
+                  `sys004` bigint DEFAULT NULL,
+                  `sys005` int DEFAULT 1,
+                  `sys006` varchar(64) DEFAULT '',
+                  `sys007` varchar(64) DEFAULT '',
+                  PRIMARY KEY (`id`),
+                  UNIQUE KEY `uk_code` (`code`),
+                  KEY `idx_user_id` (`user_id`),
+                  KEY `idx_envelope_id` (`envelope_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户信封实例(一封一行)'
+                """,
+                """
+                CREATE TABLE IF NOT EXISTS `biz_coin_log` (
+                  `id` bigint NOT NULL AUTO_INCREMENT,
+                  `user_id` bigint NOT NULL,
+                  `change_amount` int NOT NULL COMMENT '变动数量(正负)',
+                  `balance_after` int NOT NULL COMMENT '变动后余额',
+                  `log_type` varchar(20) NOT NULL COMMENT 'recharge/shop/send_letter/admin_adjust',
+                  `ref_id` bigint DEFAULT NULL COMMENT '关联业务ID',
+                  `remark` varchar(200) DEFAULT '',
+                  `sys001` datetime DEFAULT NULL,
+                  `sys002` datetime DEFAULT NULL,
+                  `sys003` bigint DEFAULT NULL,
+                  `sys004` bigint DEFAULT NULL,
+                  `sys005` int DEFAULT 1,
+                  `sys006` varchar(64) DEFAULT '',
+                  `sys007` varchar(64) DEFAULT '',
+                  PRIMARY KEY (`id`),
+                  KEY `idx_user_id` (`user_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='铜钱流水'
                 """,
                 """
                 CREATE TABLE IF NOT EXISTS `biz_config` (
@@ -370,9 +412,7 @@ public class DataInitRunner implements ApplicationRunner {
                 CREATE TABLE IF NOT EXISTS `biz_bamboo` (
                   `id` bigint NOT NULL AUTO_INCREMENT,
                   `user_id` bigint NOT NULL,
-                  `height_cm` decimal(4,1) DEFAULT 0.0 COMMENT '文竹高度(cm)，最大5.0',
-                  `status` int DEFAULT 1,
-                  `app_id` bigint DEFAULT NULL,
+                  `height_cm` int DEFAULT 0 COMMENT '当前高度(cm)',
                   `sys001` datetime DEFAULT NULL,
                   `sys002` datetime DEFAULT NULL,
                   `sys003` bigint DEFAULT NULL,
@@ -380,18 +420,18 @@ public class DataInitRunner implements ApplicationRunner {
                   `sys005` int DEFAULT 1,
                   `sys006` varchar(64) DEFAULT '',
                   `sys007` varchar(64) DEFAULT '',
-                  PRIMARY KEY (`id`)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文竹表'
+                  PRIMARY KEY (`id`),
+                  UNIQUE KEY `uk_user_id` (`user_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户文竹'
                 """,
                 """
                 CREATE TABLE IF NOT EXISTS `biz_bamboo_log` (
                   `id` bigint NOT NULL AUTO_INCREMENT,
                   `user_id` bigint NOT NULL,
-                  `bamboo_id` bigint NOT NULL,
-                  `change_type` varchar(50) DEFAULT '' COMMENT '变化类型(letter/diary)',
-                  `change_value` decimal(4,1) DEFAULT 0.0 COMMENT '变化高度(cm)',
-                  `reason` varchar(200) DEFAULT '' COMMENT '变化原因',
-                  `app_id` bigint DEFAULT NULL,
+                  `biz_type` varchar(20) DEFAULT '' COMMENT 'letter/diary',
+                  `add_cm` int DEFAULT 0 COMMENT '本次生长(cm)',
+                  `content_len` int DEFAULT 0 COMMENT '内容字数',
+                  `ref_id` bigint DEFAULT NULL COMMENT '关联信件/日记ID',
                   `sys001` datetime DEFAULT NULL,
                   `sys002` datetime DEFAULT NULL,
                   `sys003` bigint DEFAULT NULL,
@@ -399,20 +439,23 @@ public class DataInitRunner implements ApplicationRunner {
                   `sys005` int DEFAULT 1,
                   `sys006` varchar(64) DEFAULT '',
                   `sys007` varchar(64) DEFAULT '',
-                  PRIMARY KEY (`id`)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文竹生长记录表'
+                  PRIMARY KEY (`id`),
+                  KEY `idx_user_id` (`user_id`),
+                  KEY `idx_sys001` (`sys001`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文竹生长记录'
                 """,
                 """
                 CREATE TABLE IF NOT EXISTS `biz_login_log` (
                   `id` bigint NOT NULL AUTO_INCREMENT,
                   `user_id` bigint DEFAULT NULL,
-                  `username` varchar(50) DEFAULT '' COMMENT '登录名',
-                  `login_ip` varchar(64) DEFAULT '' COMMENT '登录IP',
-                  `login_type` varchar(20) DEFAULT 'login' COMMENT 'login/logout',
-                  `code` int DEFAULT NULL COMMENT '状态码 20000成功 50000失败',
-                  `message` varchar(200) DEFAULT '' COMMENT '消息',
-                  `login_time` datetime DEFAULT NULL COMMENT '登录时间',
-                  `app_id` bigint DEFAULT NULL,
+                  `user_name` varchar(64) DEFAULT '',
+                  `login_name` varchar(64) DEFAULT '',
+                  `login_ip` varchar(64) DEFAULT '',
+                  `login_location` varchar(128) DEFAULT '',
+                  `login_type` varchar(32) DEFAULT '',
+                  `code` int DEFAULT NULL,
+                  `message` varchar(255) DEFAULT '',
+                  `login_time` datetime DEFAULT NULL,
                   `sys001` datetime DEFAULT NULL,
                   `sys002` datetime DEFAULT NULL,
                   `sys003` bigint DEFAULT NULL,
@@ -423,7 +466,61 @@ public class DataInitRunner implements ApplicationRunner {
                   PRIMARY KEY (`id`),
                   KEY `idx_user_id` (`user_id`),
                   KEY `idx_login_time` (`login_time`)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='应用登录日志表'
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户登录日志'
+                """,
+                """
+                CREATE TABLE IF NOT EXISTS `biz_announcement` (
+                  `id` bigint NOT NULL AUTO_INCREMENT,
+                  `title` varchar(200) NOT NULL COMMENT '公告标题',
+                  `content` text COMMENT '公告内容',
+                  `status` int DEFAULT 1 COMMENT '0下架 1发布',
+                  `sys001` datetime DEFAULT NULL,
+                  `sys002` datetime DEFAULT NULL,
+                  `sys003` bigint DEFAULT NULL,
+                  `sys004` bigint DEFAULT NULL,
+                  `sys005` int DEFAULT 1,
+                  `sys006` varchar(64) DEFAULT '',
+                  `sys007` varchar(64) DEFAULT '',
+                  PRIMARY KEY (`id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='公告'
+                """,
+                """
+                CREATE TABLE IF NOT EXISTS `biz_sys_mail` (
+                  `id` bigint NOT NULL AUTO_INCREMENT,
+                  `title` varchar(200) NOT NULL COMMENT '邮件标题',
+                  `content` text COMMENT '邮件内容',
+                  `coin_amount` int DEFAULT 0 COMMENT '附赠铜钱数(0为无)',
+                  `stamp_id` bigint DEFAULT NULL COMMENT '附赠邮票ID',
+                  `envelope_id` bigint DEFAULT NULL COMMENT '附赠信封ID',
+                  `sender_id` bigint DEFAULT NULL COMMENT '发送管理员ID',
+                  `sys001` datetime DEFAULT NULL,
+                  `sys002` datetime DEFAULT NULL,
+                  `sys003` bigint DEFAULT NULL,
+                  `sys004` bigint DEFAULT NULL,
+                  `sys005` int DEFAULT 1,
+                  `sys006` varchar(64) DEFAULT '',
+                  `sys007` varchar(64) DEFAULT '',
+                  PRIMARY KEY (`id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统邮件'
+                """,
+                """
+                CREATE TABLE IF NOT EXISTS `biz_user_mail` (
+                  `id` bigint NOT NULL AUTO_INCREMENT,
+                  `mail_id` bigint NOT NULL COMMENT '系统邮件ID',
+                  `user_id` bigint NOT NULL COMMENT '接收用户ID',
+                  `claimed` int DEFAULT 0 COMMENT '0未领取 1已领取',
+                  `claim_time` datetime DEFAULT NULL COMMENT '领取时间',
+                  `sys001` datetime DEFAULT NULL,
+                  `sys002` datetime DEFAULT NULL,
+                  `sys003` bigint DEFAULT NULL,
+                  `sys004` bigint DEFAULT NULL,
+                  `sys005` int DEFAULT 1,
+                  `sys006` varchar(64) DEFAULT '',
+                  `sys007` varchar(64) DEFAULT '',
+                  PRIMARY KEY (`id`),
+                  UNIQUE KEY `uk_mail_user` (`mail_id`, `user_id`),
+                  KEY `idx_user_id` (`user_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户系统邮件'
                 """);
         return String.join(";\n\n", ddls) + ";";
     }

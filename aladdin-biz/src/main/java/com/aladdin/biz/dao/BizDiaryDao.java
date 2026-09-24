@@ -16,13 +16,13 @@ import java.util.List;
 public interface BizDiaryDao extends BaseDao<BizDiary> {
 
     @Select("SELECT d.*, u.nickname AS user_name FROM biz_diary d " +
-            "LEFT JOIN sys_user u ON d.user_id = u.id " +
+            "LEFT JOIN biz_user u ON d.user_id = u.id " +
             "WHERE d.id = #{id} AND d.sys005 = 1")
     BizDiary selectDetailById(@Param("id") Long id);
 
     @Select("<script>" +
             "SELECT d.*, u.nickname AS user_name FROM biz_diary d " +
-            "LEFT JOIN sys_user u ON d.user_id = u.id " +
+            "LEFT JOIN biz_user u ON d.user_id = u.id " +
             "WHERE d.sys005 = 1 " +
             "<if test='userId != null'>AND d.user_id = #{userId} </if>" +
             "<if test='isPublic != null'>AND d.is_public = #{isPublic} </if>" +

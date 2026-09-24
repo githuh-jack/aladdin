@@ -1,9 +1,8 @@
 package com.aladdin.biz.controller;
 
 import com.aladdin.biz.dao.BizStampDao;
-import com.aladdin.biz.dao.BizUserStampDao;
+import com.aladdin.biz.dao.BizUserStampItemDao;
 import com.aladdin.biz.entity.BizStamp;
-import com.aladdin.biz.entity.BizUserStamp;
 import com.aladdin.common.core.domain.R;
 import com.aladdin.common.core.exception.BusinessException;
 import com.aladdin.common.core.exception.GlobalErrorCode;
@@ -20,7 +19,7 @@ import java.util.Map;
 
 /**
  * 邮票控制器
- * 用户: 浏览上架邮票、查看我的邮票
+ * 用户: 浏览上架邮票、查看我的邮票(按模板聚合可用/已用数量)
  * 管理员: CRUD 邮票
  *
  * @author cles
@@ -34,7 +33,7 @@ public class StampController {
     private BizStampDao stampDao;
 
     @Autowired
-    private BizUserStampDao userStampDao;
+    private BizUserStampItemDao userStampItemDao;
 
     /** 浏览上架邮票 */
     @GetMapping("/shop")
@@ -42,14 +41,14 @@ public class StampController {
         return R.ok(stampDao.selectOnShelfList());
     }
 
-    /** 我的邮票 */
+    /** 我的邮票(按模板聚合，含套系与可用/已用数量) */
     @GetMapping("/mine")
-    public R<List<BizUserStamp>> mine() {
+    public R<List<Map<String, Object>>> mine() {
         Long userId = LoginService.getCurrentUserId();
         if (userId == null) {
             throw new BusinessException(GlobalErrorCode.UNAUTHORIZED);
         }
-        return R.ok(userStampDao.selectMyStamps(userId));
+        return R.ok(userStampItemDao.selectMyStampAgg(userId));
     }
 
     /** 主题收藏进度(已使用+未使用均算) */

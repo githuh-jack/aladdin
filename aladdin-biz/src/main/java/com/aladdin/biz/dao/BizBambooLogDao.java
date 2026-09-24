@@ -19,7 +19,7 @@ public interface BizBambooLogDao extends BaseDao<BizBambooLog> {
     /** 生长记录列表(关联用户昵称) */
     @Select("<script>" +
             "SELECT l.*, u.nickname AS nick_name FROM biz_bamboo_log l " +
-            "LEFT JOIN sys_user u ON l.user_id = u.id " +
+            "LEFT JOIN biz_user u ON l.user_id = u.id " +
             "WHERE l.sys005 = 1 " +
             "<if test='userId != null'> AND l.user_id = #{userId}</if>" +
             " ORDER BY l.sys001 DESC LIMIT #{offset}, #{limit}" +

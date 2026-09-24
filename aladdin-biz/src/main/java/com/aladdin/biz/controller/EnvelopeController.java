@@ -1,9 +1,8 @@
 package com.aladdin.biz.controller;
 
 import com.aladdin.biz.dao.BizEnvelopeDao;
-import com.aladdin.biz.dao.BizUserEnvelopeDao;
+import com.aladdin.biz.dao.BizUserEnvelopeItemDao;
 import com.aladdin.biz.entity.BizEnvelope;
-import com.aladdin.biz.entity.BizUserEnvelope;
 import com.aladdin.common.core.domain.R;
 import com.aladdin.common.core.exception.BusinessException;
 import com.aladdin.common.core.exception.GlobalErrorCode;
@@ -14,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 信封控制器
@@ -29,20 +29,21 @@ public class EnvelopeController {
     private BizEnvelopeDao envelopeDao;
 
     @Autowired
-    private BizUserEnvelopeDao userEnvelopeDao;
+    private BizUserEnvelopeItemDao userEnvelopeItemDao;
 
     @GetMapping("/shop")
     public R<List<BizEnvelope>> shopList() {
         return R.ok(envelopeDao.selectOnShelfList());
     }
 
+    /** 我的信封(按模板聚合可用/已用数量) */
     @GetMapping("/mine")
-    public R<List<BizUserEnvelope>> mine() {
+    public R<List<Map<String, Object>>> mine() {
         Long userId = LoginService.getCurrentUserId();
         if (userId == null) {
             throw new BusinessException(GlobalErrorCode.UNAUTHORIZED);
         }
-        return R.ok(userEnvelopeDao.selectMyEnvelopes(userId));
+        return R.ok(userEnvelopeItemDao.selectMyEnvelopeAgg(userId));
     }
 
     @GetMapping("/detail/{id}")

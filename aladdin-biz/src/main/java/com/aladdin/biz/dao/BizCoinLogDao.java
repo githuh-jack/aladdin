@@ -26,7 +26,7 @@ public interface BizCoinLogDao extends BaseDao<BizCoinLog> {
 
     @Select("<script>" +
             "SELECT cl.*, u.nickname AS user_name FROM biz_coin_log cl " +
-            "LEFT JOIN sys_user u ON cl.user_id = u.id " +
+            "LEFT JOIN biz_user u ON cl.user_id = u.id " +
             "WHERE cl.sys005 = 1 " +
             "<if test='userId != null'>AND cl.user_id = #{userId} </if>" +
             "<if test='logType != null and logType != \"\"'>AND cl.log_type = #{logType} </if>" +

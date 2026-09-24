@@ -21,7 +21,7 @@ public interface BizAvatarReviewDao extends BaseDao<BizAvatarReview> {
      */
     @Select("SELECT r.id, r.user_id AS userId, su.nickname AS userName, " +
             "r.image_url AS imageUrl, r.status, r.remark, r.sys001 " +
-            "FROM biz_avatar_review r LEFT JOIN sys_user su ON r.user_id = su.id " +
+            "FROM biz_avatar_review r LEFT JOIN biz_user su ON r.user_id = su.id " +
             "WHERE r.sys005 = 1 AND (#{status} IS NULL OR r.status = #{status}) " +
             "ORDER BY r.sys001 DESC LIMIT 200")
     List<Map<String, Object>> selectReviewsWithUser(@Param("status") Integer status);

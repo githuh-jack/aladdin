@@ -1,9 +1,41 @@
 -- ================================================================
 -- Aladdin 业务模块初始化 SQL
--- 说明：信件/好友/日记/感想/其他/邮票/信封/铜钱/订单
+-- 说明：传信纸船用户/信件/好友/日记/感想/其他/邮票/信封/铜钱/订单
 -- 依赖：sys_user 表（来自 init.sql，需先执行）
 -- 幂等可重复执行
 -- ================================================================
+
+-- ==============================
+-- 表：传信纸船用户（登录/注册均走此表，与后台 sys_user 相互独立；
+--     AUTO_INCREMENT 从 10000 起，避免与 sys_user 的 id 空间重叠导致
+--     Redis 登录token键(LOGIN_TOKEN+userId)相互覆盖）
+-- ==============================
+CREATE TABLE IF NOT EXISTS `biz_user` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `username` varchar(50) NOT NULL COMMENT '用户名',
+  `password` varchar(100) NOT NULL COMMENT '密码',
+  `nickname` varchar(50) DEFAULT '' COMMENT '昵称(笔名)',
+  `real_name` varchar(50) DEFAULT '' COMMENT '姓名',
+  `email` varchar(50) DEFAULT '',
+  `phone` varchar(20) DEFAULT '',
+  `avatar` varchar(200) DEFAULT '',
+  `invite_code` varchar(16) DEFAULT '' COMMENT '注册时填写的邀请码',
+  `user_no` bigint DEFAULT NULL COMMENT '用户唯一编号(6位,从101322起,邮寄信件凭编号)',
+  `coins` int DEFAULT 0 COMMENT '铜钱余额(文)',
+  `credit_score` int DEFAULT 100 COMMENT '信用分',
+  `status` int DEFAULT 1 COMMENT '1正常 0禁用',
+  `app_id` bigint DEFAULT NULL COMMENT '所属应用ID',
+  `sys001` datetime DEFAULT NULL,
+  `sys002` datetime DEFAULT NULL,
+  `sys003` bigint DEFAULT NULL,
+  `sys004` bigint DEFAULT NULL,
+  `sys005` int DEFAULT 1,
+  `sys006` varchar(64) DEFAULT '',
+  `sys007` varchar(64) DEFAULT '',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_username` (`username`),
+  UNIQUE KEY `uk_user_no` (`user_no`)
+) ENGINE=InnoDB AUTO_INCREMENT=10000 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='应用用户表';
 
 -- ==============================
 -- 表：信件
@@ -13,13 +45,14 @@ CREATE TABLE IF NOT EXISTS `biz_letter` (
   `sender_id` bigint NOT NULL COMMENT '发信人ID',
   `receiver_id` bigint DEFAULT NULL COMMENT '收信人ID(地址信件时为空)',
   `receiver_address` varchar(200) DEFAULT '' COMMENT '收件地址(寄给非好友时填写)',
-  `title` varchar(200) NOT NULL,
+  `title` varchar(200) DEFAULT '' COMMENT '标题(可不填)',
   `content` text,
   `status` int DEFAULT 0 COMMENT '0草稿 1已发送 2已读 3已删除',
   `stamp_id` bigint DEFAULT NULL COMMENT '使用的邮票ID',
   `envelope_id` bigint DEFAULT NULL COMMENT '使用的信封ID',
   `send_time` datetime DEFAULT NULL COMMENT '发送时间',
   `read_time` datetime DEFAULT NULL COMMENT '阅读时间',
+  `arrival_time` datetime DEFAULT NULL COMMENT '到达时间(寄出时间+邮票送达天数，未到时间收件人不可见)',
   `sys001` datetime DEFAULT NULL,
   `sys002` datetime DEFAULT NULL,
   `sys003` bigint DEFAULT NULL,
@@ -110,6 +143,8 @@ CREATE TABLE IF NOT EXISTS `biz_stamp` (
   `stock` int DEFAULT 0 COMMENT '库存, -1不限',
   `stamp_type` varchar(20) DEFAULT '普通' COMMENT '普通/稀有/限量',
   `theme` varchar(50) DEFAULT '经典' COMMENT '邮票主题(收藏分类)',
+  `series` varchar(100) DEFAULT '' COMMENT '套系主题(空为散票)',
+  `delivery_days` int DEFAULT 3 COMMENT '默认送达时间(天)',
   `status` int DEFAULT 1 COMMENT '0下架 1上架',
   `sys001` datetime DEFAULT NULL,
   `sys002` datetime DEFAULT NULL,
@@ -122,14 +157,17 @@ CREATE TABLE IF NOT EXISTS `biz_stamp` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='邮票';
 
 -- ==============================
--- 表：用户持有邮票
+-- 表：用户邮票实例(模板+实际编码两张表模式：biz_stamp为主体模板，
+--     本表为用户实际持有的每张邮票，一票一行，唯一编码不对外展示)
 -- ==============================
-CREATE TABLE IF NOT EXISTS `biz_user_stamp` (
+CREATE TABLE IF NOT EXISTS `biz_user_stamp_item` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `user_id` bigint NOT NULL,
-  `stamp_id` bigint NOT NULL,
-  `count` int DEFAULT 0 COMMENT '可用数量',
-  `used_count` int DEFAULT 0 COMMENT '已使用数量',
+  `stamp_id` bigint NOT NULL COMMENT '邮票模板ID',
+  `code` varchar(32) DEFAULT NULL COMMENT '邮票唯一编码(ST+12位序号，不对外展示)',
+  `status` int DEFAULT 1 COMMENT '1未使用 2已使用',
+  `used_time` datetime DEFAULT NULL COMMENT '使用时间',
+  `letter_id` bigint DEFAULT NULL COMMENT '消耗该邮票的信件ID',
   `sys001` datetime DEFAULT NULL,
   `sys002` datetime DEFAULT NULL,
   `sys003` bigint DEFAULT NULL,
@@ -138,8 +176,10 @@ CREATE TABLE IF NOT EXISTS `biz_user_stamp` (
   `sys006` varchar(64) DEFAULT '',
   `sys007` varchar(64) DEFAULT '',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_user_stamp` (`user_id`, `stamp_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户持有邮票';
+  UNIQUE KEY `uk_code` (`code`),
+  KEY `idx_user_id` (`user_id`),
+  KEY `idx_stamp_id` (`stamp_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户邮票实例(一票一行)';
 
 -- ==============================
 -- 表：信封
@@ -164,13 +204,16 @@ CREATE TABLE IF NOT EXISTS `biz_envelope` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='信封';
 
 -- ==============================
--- 表：用户持有信封
+-- 表：用户信封实例(与邮票实例同构，唯一编码不对外展示)
 -- ==============================
-CREATE TABLE IF NOT EXISTS `biz_user_envelope` (
+CREATE TABLE IF NOT EXISTS `biz_user_envelope_item` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `user_id` bigint NOT NULL,
-  `envelope_id` bigint NOT NULL,
-  `count` int DEFAULT 0,
+  `envelope_id` bigint NOT NULL COMMENT '信封模板ID',
+  `code` varchar(32) DEFAULT NULL COMMENT '信封唯一编码(EN+12位序号，不对外展示)',
+  `status` int DEFAULT 1 COMMENT '1未使用 2已使用',
+  `used_time` datetime DEFAULT NULL COMMENT '使用时间',
+  `letter_id` bigint DEFAULT NULL COMMENT '消耗该信封的信件ID',
   `sys001` datetime DEFAULT NULL,
   `sys002` datetime DEFAULT NULL,
   `sys003` bigint DEFAULT NULL,
@@ -179,8 +222,10 @@ CREATE TABLE IF NOT EXISTS `biz_user_envelope` (
   `sys006` varchar(64) DEFAULT '',
   `sys007` varchar(64) DEFAULT '',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_user_envelope` (`user_id`, `envelope_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户持有信封';
+  UNIQUE KEY `uk_code` (`code`),
+  KEY `idx_user_id` (`user_id`),
+  KEY `idx_envelope_id` (`envelope_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户信封实例(一封一行)';
 
 -- ==============================
 -- 表：用户铜钱账户
@@ -483,6 +528,66 @@ CREATE TABLE IF NOT EXISTS `biz_checkin_record` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='每日签到记录';
 
 -- ==============================
+-- 表：公告(后台发布，用户登录后首页可见)
+-- ==============================
+CREATE TABLE IF NOT EXISTS `biz_announcement` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `title` varchar(200) NOT NULL COMMENT '公告标题',
+  `content` text COMMENT '公告内容',
+  `status` int DEFAULT 1 COMMENT '0下架 1发布',
+  `sys001` datetime DEFAULT NULL,
+  `sys002` datetime DEFAULT NULL,
+  `sys003` bigint DEFAULT NULL,
+  `sys004` bigint DEFAULT NULL,
+  `sys005` int DEFAULT 1,
+  `sys006` varchar(64) DEFAULT '',
+  `sys007` varchar(64) DEFAULT '',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='公告';
+
+-- ==============================
+-- 表：系统邮件(管理员发送，可附赠铜钱/邮票/信封)
+-- ==============================
+CREATE TABLE IF NOT EXISTS `biz_sys_mail` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `title` varchar(200) NOT NULL COMMENT '邮件标题',
+  `content` text COMMENT '邮件内容',
+  `coin_amount` int DEFAULT 0 COMMENT '附赠铜钱数(0为无)',
+  `stamp_id` bigint DEFAULT NULL COMMENT '附赠邮票ID',
+  `envelope_id` bigint DEFAULT NULL COMMENT '附赠信封ID',
+  `sender_id` bigint DEFAULT NULL COMMENT '发送管理员ID',
+  `sys001` datetime DEFAULT NULL,
+  `sys002` datetime DEFAULT NULL,
+  `sys003` bigint DEFAULT NULL,
+  `sys004` bigint DEFAULT NULL,
+  `sys005` int DEFAULT 1,
+  `sys006` varchar(64) DEFAULT '',
+  `sys007` varchar(64) DEFAULT '',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统邮件';
+
+-- ==============================
+-- 表：用户系统邮件(每用户一份，读取时领取附件，幂等)
+-- ==============================
+CREATE TABLE IF NOT EXISTS `biz_user_mail` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `mail_id` bigint NOT NULL COMMENT '系统邮件ID',
+  `user_id` bigint NOT NULL COMMENT '接收用户ID',
+  `claimed` int DEFAULT 0 COMMENT '0未领取 1已领取',
+  `claim_time` datetime DEFAULT NULL COMMENT '领取时间',
+  `sys001` datetime DEFAULT NULL,
+  `sys002` datetime DEFAULT NULL,
+  `sys003` bigint DEFAULT NULL,
+  `sys004` bigint DEFAULT NULL,
+  `sys005` int DEFAULT 1,
+  `sys006` varchar(64) DEFAULT '',
+  `sys007` varchar(64) DEFAULT '',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_mail_user` (`mail_id`, `user_id`),
+  KEY `idx_user_id` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户系统邮件';
+
+-- ==============================
 -- 初始数据：奖励与价格配置
 -- ==============================
 INSERT IGNORE INTO `biz_config` (`config_key`, `config_value`, `remark`, `sys001`, `sys003`, `sys005`, `sys006`) VALUES
@@ -522,9 +627,12 @@ BEGIN
     ALTER TABLE `biz_stamp` ADD COLUMN `theme` varchar(50) DEFAULT '经典' COMMENT '邮票主题(收藏分类)' AFTER `stamp_type`;
   END IF;
   IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
-                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'biz_user_stamp' AND COLUMN_NAME = 'used_count') THEN
-    ALTER TABLE `biz_user_stamp` ADD COLUMN `used_count` int DEFAULT 0 COMMENT '已使用数量' AFTER `count`;
+                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'biz_stamp' AND COLUMN_NAME = 'series') THEN
+    ALTER TABLE `biz_stamp` ADD COLUMN `series` varchar(100) DEFAULT '' COMMENT '套系主题(空为散票)' AFTER `theme`;
   END IF;
+  -- 旧持有数量表已由实例表(biz_user_stamp_item/biz_user_envelope_item)取代
+  DROP TABLE IF EXISTS `biz_user_stamp`;
+  DROP TABLE IF EXISTS `biz_user_envelope`;
   IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
                  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'biz_user_profile' AND COLUMN_NAME = 'avatar_status') THEN
     ALTER TABLE `biz_user_profile` ADD COLUMN `avatar_status` int DEFAULT 0 COMMENT '头像状态 0无 1待审 2已通过 3已拒绝' AFTER `avatar_url`;
@@ -532,6 +640,26 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
                  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'sys_user' AND COLUMN_NAME = 'invite_code') THEN
     ALTER TABLE `sys_user` ADD COLUMN `invite_code` varchar(16) DEFAULT '' COMMENT '注册时填写的邀请码';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'sys_user' AND COLUMN_NAME = 'real_name') THEN
+    ALTER TABLE `sys_user` ADD COLUMN `real_name` varchar(50) DEFAULT '' COMMENT '姓名' AFTER `nickname`;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'biz_login_log' AND COLUMN_NAME = 'user_name') THEN
+    ALTER TABLE `biz_login_log` ADD COLUMN `user_name` varchar(64) DEFAULT '' AFTER `user_id`;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'biz_login_log' AND COLUMN_NAME = 'login_name') THEN
+    ALTER TABLE `biz_login_log` ADD COLUMN `login_name` varchar(64) DEFAULT '' AFTER `user_name`;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'biz_login_log' AND COLUMN_NAME = 'login_location') THEN
+    ALTER TABLE `biz_login_log` ADD COLUMN `login_location` varchar(128) DEFAULT '' AFTER `login_ip`;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'biz_login_log' AND COLUMN_NAME = 'username') THEN
+    ALTER TABLE `biz_login_log` DROP COLUMN `username`;
   END IF;
   IF EXISTS (SELECT 1 FROM information_schema.COLUMNS
              WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'biz_invite_record' AND COLUMN_NAME = 'reward_credit')
@@ -542,6 +670,20 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
                  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'biz_user_profile' AND COLUMN_NAME = 'reward_flags') THEN
     ALTER TABLE `biz_user_profile` ADD COLUMN `reward_flags` int DEFAULT 0 COMMENT '一次性奖励标记位 1注册 2完善资料' AFTER `credit_score`;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'biz_user' AND COLUMN_NAME = 'user_no') THEN
+    ALTER TABLE `biz_user` ADD COLUMN `user_no` bigint DEFAULT NULL COMMENT '用户唯一编号(6位,从101322起,邮寄信件凭编号)' AFTER `invite_code`;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.STATISTICS
+                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'biz_user' AND INDEX_NAME = 'uk_user_no') THEN
+    ALTER TABLE `biz_user` ADD UNIQUE KEY `uk_user_no` (`user_no`);
+  END IF;
+  -- 回填存量用户编号：按注册顺序首个101322，其后每个+37(3~100区间内)
+  IF EXISTS (SELECT 1 FROM `biz_user` WHERE `user_no` IS NULL) THEN
+    UPDATE `biz_user` u
+      JOIN (SELECT id, ROW_NUMBER() OVER (ORDER BY id) rn FROM `biz_user` WHERE `user_no` IS NULL) t ON u.id = t.id
+      SET u.`user_no` = 101322 + (t.rn - 1) * 37;
   END IF;
 END$$
 DELIMITER ;

@@ -19,7 +19,7 @@ public interface BizLoginLogDao extends BaseDao<BizLoginLog> {
     /** 登录日志列表(关联用户昵称) */
     @Select("<script>" +
             "SELECT l.*, u.nickname AS nick_name FROM biz_login_log l " +
-            "LEFT JOIN sys_user u ON l.user_id = u.id " +
+            "LEFT JOIN biz_user u ON l.user_id = u.id " +
             "WHERE l.sys005 = 1 " +
             "<if test='userId != null'> AND l.user_id = #{userId}</if>" +
             "<if test='loginName != null and loginName != \"\"'> AND l.login_name LIKE CONCAT('%', #{loginName}, '%')</if>" +

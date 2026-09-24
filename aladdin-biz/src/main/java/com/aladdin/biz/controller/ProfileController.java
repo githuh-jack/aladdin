@@ -331,7 +331,7 @@ public class ProfileController {
     }
 
     /**
-     * 绑定邀请关系：注册时邀请码写入 sys_user.invite_code，
+     * 绑定邀请关系：注册时邀请码写入 biz_user.invite_code，
      * 被邀请人首次初始化资料时在此绑定并给邀请人发放信用分奖励
      */
     private void bindInviteIfNeeded(Long inviteeId) {

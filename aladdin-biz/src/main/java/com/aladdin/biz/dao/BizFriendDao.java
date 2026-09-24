@@ -20,7 +20,7 @@ public interface BizFriendDao extends BaseDao<BizFriend> {
      */
     @Select("SELECT f.*, u.nickname AS friend_name, u.avatar AS friend_avatar " +
             "FROM biz_friend f " +
-            "INNER JOIN sys_user u ON f.friend_id = u.id " +
+            "INNER JOIN biz_user u ON f.friend_id = u.id " +
             "WHERE f.sys005 = 1 AND f.user_id = #{userId} AND f.status = 1 " +
             "ORDER BY f.add_time DESC")
     List<BizFriend> selectMyFriends(@Param("userId") Long userId);
@@ -30,7 +30,7 @@ public interface BizFriendDao extends BaseDao<BizFriend> {
      */
     @Select("SELECT f.*, u.nickname AS friend_name, u.avatar AS friend_avatar " +
             "FROM biz_friend f " +
-            "INNER JOIN sys_user u ON f.user_id = u.id " +
+            "INNER JOIN biz_user u ON f.user_id = u.id " +
             "WHERE f.sys005 = 1 AND f.friend_id = #{userId} AND f.status = 0 " +
             "ORDER BY f.id DESC")
     List<BizFriend> selectPendingApplies(@Param("userId") Long userId);
@@ -49,7 +49,7 @@ public interface BizFriendDao extends BaseDao<BizFriend> {
      */
     @Select("SELECT f.*, u.nickname AS friend_name, u.avatar AS friend_avatar " +
             "FROM biz_friend f " +
-            "INNER JOIN sys_user u ON f.friend_id = u.id " +
+            "INNER JOIN biz_user u ON f.friend_id = u.id " +
             "WHERE f.sys005 = 1 AND f.user_id = #{userId} AND f.status = 4 " +
             "ORDER BY f.id DESC")
     List<BizFriend> selectBlacklist(@Param("userId") Long userId);

@@ -27,8 +27,8 @@ public interface BizStampDao extends BaseDao<BizStamp> {
     @Select("SELECT theme, COUNT(*) AS total FROM biz_stamp WHERE sys005 = 1 GROUP BY theme")
     List<java.util.Map<String, Object>> selectThemeTotals();
 
-    /** 我收集的各主题邮票数(已使用+未使用均算) */
-    @Select("SELECT s.theme, COUNT(*) AS collected FROM biz_user_stamp us " +
+    /** 我收集的各主题邮票数(已使用+未使用均算，按模板去重) */
+    @Select("SELECT s.theme, COUNT(DISTINCT us.stamp_id) AS collected FROM biz_user_stamp_item us " +
             "INNER JOIN biz_stamp s ON us.stamp_id = s.id " +
             "WHERE us.sys005 = 1 AND us.user_id = #{userId} " +
             "GROUP BY s.theme")

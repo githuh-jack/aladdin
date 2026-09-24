@@ -27,6 +27,10 @@ public class BizStamp extends BaseEntity {
     private String stampType;
     /** 邮票主题(收藏分类) */
     private String theme;
+    /** 套系主题(空为散票) */
+    private String series;
+    /** 默认送达时间(天) */
+    private Integer deliveryDays;
     /** 0下架 1上架 */
     private Integer status;
 }

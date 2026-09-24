@@ -17,7 +17,7 @@ public interface BizOrderDao extends BaseDao<BizOrder> {
 
     @Select("<script>" +
             "SELECT o.*, u.nickname AS user_name FROM biz_order o " +
-            "LEFT JOIN sys_user u ON o.user_id = u.id " +
+            "LEFT JOIN biz_user u ON o.user_id = u.id " +
             "WHERE o.sys005 = 1 " +
             "<if test='userId != null'>AND o.user_id = #{userId} </if>" +
             "<if test='itemType != null and itemType != \"\"'>AND o.item_type = #{itemType} </if>" +

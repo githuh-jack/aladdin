@@ -95,6 +95,20 @@ public class RewardService {
     // ==================== 每日登录 + 连续签到 ====================
 
     /**
+     * 注册奖励：新用户注册后发放欢迎铜钱(金额取 biz_config 的 reward.register，默认100)
+     */
+    public void onRegistered(Long userId) {
+        try {
+            int bonus = configService.getInt("reward.register", 100);
+            if (bonus > 0) {
+                addCoins(userId, bonus, "register", "注册奖励");
+            }
+        } catch (Exception ignored) {
+            // 奖励发放失败不影响注册主流程
+        }
+    }
+
+    /**
      * 每日首次活动签到：发放每日登录奖励，连续签到满7/30天发额外奖励
      * 由拦截器在用户当日首个业务请求时触发，每日限1次
      */

@@ -52,6 +52,8 @@ aladdin:
       - /auth/login
       - /auth/logout
       - /auth/userInfo
+      - /biz/auth/register
+      - /biz/auth/login
       - /sso/**
       - /verifyCode/**
       - /biz/public/**

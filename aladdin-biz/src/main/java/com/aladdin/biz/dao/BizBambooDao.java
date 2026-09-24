@@ -19,7 +19,7 @@ public interface BizBambooDao extends BaseDao<BizBamboo> {
     /** 文竹列表(关联用户昵称) */
     @Select("<script>" +
             "SELECT b.id, b.user_id AS userId, u.nickname AS nickName, b.height_cm AS heightCm, b.sys001 " +
-            "FROM biz_bamboo b LEFT JOIN sys_user u ON b.user_id = u.id " +
+            "FROM biz_bamboo b LEFT JOIN biz_user u ON b.user_id = u.id " +
             "WHERE b.sys005 = 1 " +
             "<if test='userId != null'> AND b.user_id = #{userId}</if>" +
             " ORDER BY b.height_cm DESC LIMIT #{offset}, #{limit}" +

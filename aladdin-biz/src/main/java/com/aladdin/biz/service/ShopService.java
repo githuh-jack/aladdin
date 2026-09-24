@@ -10,6 +10,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 商店服务：购买邮票/信封，事务性扣减铜钱、增加持有、记录订单和流水
@@ -23,8 +25,8 @@ public class ShopService {
 
     @Autowired private BizStampDao stampDao;
     @Autowired private BizEnvelopeDao envelopeDao;
-    @Autowired private BizUserStampDao userStampDao;
-    @Autowired private BizUserEnvelopeDao userEnvelopeDao;
+    @Autowired private BizUserStampItemDao userStampItemDao;
+    @Autowired private BizUserEnvelopeItemDao userEnvelopeItemDao;
     @Autowired private BizCoinDao coinDao;
     @Autowired private BizCoinLogDao coinLogDao;
     @Autowired private BizOrderDao orderDao;
@@ -79,7 +81,13 @@ public class ShopService {
         // 1. 扣减铜钱余额(原子操作，DB层面防止并发超扣)
         int affected = coinDao.adjustBalance(userId, -totalPrice);
         if (affected == 0) {
-            throw new BusinessException(GlobalErrorCode.BAD_REQUEST, "铜钱不足或账户不存在");
+            // 区分账户不存在与余额不足
+            BizCoin coinAccount = coinDao.selectByUserId(userId);
+            if (coinAccount == null) {
+                throw new BusinessException(GlobalErrorCode.BAD_REQUEST, "铜钱账户不存在，请联系管理员");
+            }
+            throw new BusinessException(GlobalErrorCode.BAD_REQUEST,
+                    "铜钱不足，还差 " + (totalPrice - coinAccount.getBalance()) + " 文");
         }
         int balanceAfter = coinDao.selectByUserId(userId).getBalance();
 
@@ -111,35 +119,35 @@ public class ShopService {
         coinLog.setSys006("biz");
         coinLogDao.insert(coinLog);
 
-        // 4. 增加用户持有量
+        // 4. 增加用户持有(每张一条实例，编码统一回填，不对外展示)
         if ("stamp".equals(itemType)) {
-            BizUserStamp existing = userStampDao.selectByUserAndStamp(userId, itemId);
-            if (existing != null) {
-                userStampDao.addCount(userId, itemId, quantity);
-            } else {
-                BizUserStamp us = new BizUserStamp();
-                us.setUserId(userId);
-                us.setStampId(itemId);
-                us.setCount(quantity);
-                us.setSys001(LocalDateTime.now());
-                us.setSys005(1);
-                us.setSys006("biz");
-                userStampDao.insert(us);
+            List<BizUserStampItem> items = new ArrayList<>(quantity);
+            for (int i = 0; i < quantity; i++) {
+                BizUserStampItem item = new BizUserStampItem();
+                item.setUserId(userId);
+                item.setStampId(itemId);
+                item.setStatus(1);
+                item.setSys001(LocalDateTime.now());
+                item.setSys005(1);
+                item.setSys006("biz");
+                items.add(item);
             }
+            userStampItemDao.insertBatch(items);
+            userStampItemDao.fillStampCodes();
         } else {
-            BizUserEnvelope existing = userEnvelopeDao.selectByUserAndEnvelope(userId, itemId);
-            if (existing != null) {
-                userEnvelopeDao.addCount(userId, itemId, quantity);
-            } else {
-                BizUserEnvelope ue = new BizUserEnvelope();
-                ue.setUserId(userId);
-                ue.setEnvelopeId(itemId);
-                ue.setCount(quantity);
-                ue.setSys001(LocalDateTime.now());
-                ue.setSys005(1);
-                ue.setSys006("biz");
-                userEnvelopeDao.insert(ue);
+            List<BizUserEnvelopeItem> items = new ArrayList<>(quantity);
+            for (int i = 0; i < quantity; i++) {
+                BizUserEnvelopeItem item = new BizUserEnvelopeItem();
+                item.setUserId(userId);
+                item.setEnvelopeId(itemId);
+                item.setStatus(1);
+                item.setSys001(LocalDateTime.now());
+                item.setSys005(1);
+                item.setSys006("biz");
+                items.add(item);
             }
+            userEnvelopeItemDao.insertBatch(items);
+            userEnvelopeItemDao.fillEnvelopeCodes();
         }
 
         // 5. 扣减库存（-1表示不限）

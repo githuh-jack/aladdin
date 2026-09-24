@@ -40,6 +40,10 @@ public class BizLetter extends BaseEntity {
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
     private LocalDateTime readTime;
 
+    /** 到达时间(寄出时间+邮票送达天数，未到时间收件人不可见) */
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
+    private LocalDateTime arrivalTime;
+
     // ===== 展示用冗余字段（不映射DB列） =====
     @com.mybatisflex.annotation.Column(ignore = true)
     private String senderName;
