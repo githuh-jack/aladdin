@@ -40,12 +40,20 @@ public class PaperBoatAdminController {
      */
     private PageResult<Map<String, Object>> pageQuery(String table, PageQuery pq,
                                                       StringBuilder where, List<Object> args, String orderBy) {
-        Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM " + table + where, Long.class, args.toArray());
+        return pageQuery("*", table, pq, where, args, orderBy);
+    }
+
+    /**
+     * 分页查询公共方法(支持自定义SELECT列与JOIN，from子句直接传入)
+     */
+    private PageResult<Map<String, Object>> pageQuery(String selectColumns, String from, PageQuery pq,
+                                                      StringBuilder where, List<Object> args, String orderBy) {
+        Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM " + from + where, Long.class, args.toArray());
         List<Object> listArgs = new ArrayList<>(args);
         listArgs.add(pq.getLimit());
         listArgs.add((pq.getPage() - 1) * pq.getLimit());
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
-                "SELECT * FROM " + table + where + " ORDER BY " + orderBy + " LIMIT ? OFFSET ?", listArgs.toArray());
+                "SELECT " + selectColumns + " FROM " + from + where + " ORDER BY " + orderBy + " LIMIT ? OFFSET ?", listArgs.toArray());
         // 日期字段格式化为字符串，便于前端展示
         SimpleDateFormat sdf = new SimpleDateFormat(DATETIME_PATTERN);
         for (Map<String, Object> row : rows) {
@@ -65,6 +73,15 @@ public class PaperBoatAdminController {
         }
     }
 
+    /** 按用户笔名/编号过滤(编号精确匹配，笔名模糊匹配) */
+    private void userKeyword(StringBuilder where, List<Object> args, String alias, String keyword) {
+        if (keyword != null && !keyword.isEmpty()) {
+            where.append(" AND (").append(alias).append(".nickname LIKE ? OR ").append(alias).append(".user_no = ?)");
+            args.add("%" + keyword + "%");
+            args.add(keyword);
+        }
+    }
+
     /**
      * 应用用户列表
      */
@@ -79,51 +96,49 @@ public class PaperBoatAdminController {
     }
 
     /**
-     * 信件列表
+     * 信件列表(JOIN用户表返回笔名/编号，不暴露用户ID)
      */
     @GetMapping("/letter/list")
     @PreAuthorize("hasAuthority('app:paperBoat:list')")
-    public R<PageResult<Map<String, Object>>> letterList(PageQuery pq, @RequestParam(required = false) Long senderId) {
-        StringBuilder where = new StringBuilder(" WHERE sys005 = 1");
+    public R<PageResult<Map<String, Object>>> letterList(PageQuery pq, @RequestParam(required = false) String keyword) {
+        String from = "biz_letter l " +
+                "LEFT JOIN biz_user su ON l.sender_id = su.id " +
+                "LEFT JOIN biz_user ru ON l.receiver_id = ru.id";
+        String columns = "l.*, su.nickname AS sender_name, su.user_no AS sender_no, " +
+                "ru.nickname AS receiver_name, ru.user_no AS receiver_no";
+        StringBuilder where = new StringBuilder(" WHERE l.sys005 = 1");
         List<Object> args = new ArrayList<>();
-        if (senderId != null) {
-            where.append(" AND sender_id = ?");
-            args.add(senderId);
-        }
-        return R.ok(pageQuery("biz_letter", pq, where, args, "id DESC"));
+        userKeyword(where, args, "su", keyword);
+        return R.ok(pageQuery(columns, from, pq, where, args, "l.id DESC"));
     }
 
     /**
-     * 铜钱流水列表
+     * 铜钱流水列表(JOIN用户表返回编号/笔名，不暴露用户ID)
      */
     @GetMapping("/coin/list")
     @PreAuthorize("hasAuthority('app:paperBoat:list')")
-    public R<PageResult<Map<String, Object>>> coinList(PageQuery pq, @RequestParam(required = false) Long userId) {
-        StringBuilder where = new StringBuilder(" WHERE sys005 = 1");
+    public R<PageResult<Map<String, Object>>> coinList(PageQuery pq, @RequestParam(required = false) String keyword) {
+        String from = "biz_coin_log c LEFT JOIN biz_user u ON c.user_id = u.id";
+        String columns = "c.*, u.nickname AS user_name, u.user_no AS user_no";
+        StringBuilder where = new StringBuilder(" WHERE c.sys005 = 1");
         List<Object> args = new ArrayList<>();
-        if (userId != null) {
-            where.append(" AND user_id = ?");
-            args.add(userId);
-        }
-        return R.ok(pageQuery("biz_coin_log", pq, where, args, "id DESC"));
+        userKeyword(where, args, "u", keyword);
+        return R.ok(pageQuery(columns, from, pq, where, args, "c.id DESC"));
     }
 
     /**
-     * 奖励记录列表
+     * 奖励记录列表(奖励发放流水：注册/每日奖励等，来自 biz_coin_log)
      */
     @GetMapping("/reward/list")
     @PreAuthorize("hasAuthority('app:paperBoat:list')")
-    public R<PageResult<Map<String, Object>>> rewardList(PageQuery pq,
-                                                         @RequestParam(required = false) Long userId,
-                                                         @RequestParam(required = false) String rewardType) {
-        StringBuilder where = new StringBuilder(" WHERE sys005 = 1");
+    public R<PageResult<Map<String, Object>>> rewardList(PageQuery pq, @RequestParam(required = false) String keyword) {
+        String from = "biz_coin_log c LEFT JOIN biz_user u ON c.user_id = u.id";
+        String columns = "c.id, c.user_id, u.user_no AS user_no, u.nickname AS user_name, " +
+                "c.log_type AS reward_type, c.change_amount AS reward_coins, c.remark, c.sys001 AS reward_date";
+        StringBuilder where = new StringBuilder(" WHERE c.sys005 = 1 AND c.log_type IN ('reward', 'register')");
         List<Object> args = new ArrayList<>();
-        if (userId != null) {
-            where.append(" AND user_id = ?");
-            args.add(userId);
-        }
-        like(where, args, "reward_type", rewardType);
-        return R.ok(pageQuery("biz_reward_log", pq, where, args, "id DESC"));
+        userKeyword(where, args, "u", keyword);
+        return R.ok(pageQuery(columns, from, pq, where, args, "c.id DESC"));
     }
 
     /**
@@ -139,21 +154,6 @@ public class PaperBoatAdminController {
             args.add(userId);
         }
         return R.ok(pageQuery("biz_invite_log", pq, where, args, "id DESC"));
-    }
-
-    /**
-     * 文竹生长记录列表
-     */
-    @GetMapping("/bambooLog/list")
-    @PreAuthorize("hasAuthority('app:paperBoat:list')")
-    public R<PageResult<Map<String, Object>>> bambooLogList(PageQuery pq, @RequestParam(required = false) Long userId) {
-        StringBuilder where = new StringBuilder(" WHERE sys005 = 1");
-        List<Object> args = new ArrayList<>();
-        if (userId != null) {
-            where.append(" AND user_id = ?");
-            args.add(userId);
-        }
-        return R.ok(pageQuery("biz_bamboo_log", pq, where, args, "id DESC"));
     }
 
     /**

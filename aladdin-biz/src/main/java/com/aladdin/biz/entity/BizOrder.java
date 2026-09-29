@@ -30,4 +30,7 @@ public class BizOrder extends BaseEntity {
 
     @com.mybatisflex.annotation.Column(ignore = true)
     private String userName;
+
+    @com.mybatisflex.annotation.Column(ignore = true)
+    private Long userNo;
 }

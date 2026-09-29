@@ -71,9 +71,29 @@ public class PaperBoatAuthController {
     @Autowired
     private com.aladdin.biz.service.RewardService rewardService;
 
+    @Autowired
+    private com.aladdin.biz.service.EmailVerifyCodeService emailVerifyCodeService;
+
+    /**
+     * 发送邮箱验证码（无需登录，白名单接口）
+     * 入参：email / scene（register注册/reset找回密码，默认register）
+     */
+    @PostMapping("/send-code")
+    public R<Void> sendCode(@RequestBody Map<String, String> body) {
+        String email = body.get("email");
+        String scene = body.get("scene");
+        String sceneVal = scene == null || scene.trim().isEmpty() ? "register" : scene.trim().toLowerCase();
+        // 找回密码场景：邮箱必须已绑定账号，未注册直接拦截
+        if ("reset".equals(sceneVal) && getByEmail(email) == null) {
+            return R.fail(GlobalErrorCode.DATA_NOT_FOUND.getCode(), "该邮箱未绑定任何账号");
+        }
+        emailVerifyCodeService.sendCode(email, sceneVal);
+        return R.ok("验证码已发送，请查收邮箱", null);
+    }
+
     /**
      * 用户注册（传信纸船）
-     * 入参：username / password / nickname（笔名，必填） / email（可选） / inviteCode（可选）
+     * 入参：username / password / nickname（笔名，必填） / email（必填） / emailCode（邮箱验证码，必填） / inviteCode（可选）
      */
     @PostMapping("/register")
     public R<Map<String, Object>> register(@RequestBody Map<String, String> body) {
@@ -81,6 +101,7 @@ public class PaperBoatAuthController {
         String password = body.get("password");
         String nickname = body.get("nickname");
         String email = body.get("email");
+        String emailCode = body.get("emailCode");
         String inviteCode = body.get("inviteCode");
         if (username == null || username.trim().isEmpty()
                 || password == null || password.trim().isEmpty()) {
@@ -98,6 +119,12 @@ public class PaperBoatAuthController {
         if (nickname.trim().length() > 30) {
             return R.fail(GlobalErrorCode.BAD_REQUEST.getCode(), "笔名最多30个字符");
         }
+        if (email == null || email.trim().isEmpty()) {
+            return R.fail(GlobalErrorCode.BAD_REQUEST.getCode(), "请输入邮箱");
+        }
+        if (emailCode == null || emailCode.trim().isEmpty()) {
+            return R.fail(GlobalErrorCode.BAD_REQUEST.getCode(), "请输入邮箱验证码");
+        }
         // 邀请码可选填：填写时仅校验格式
         if (inviteCode != null && !inviteCode.trim().isEmpty()
                 && !inviteCode.trim().matches("[A-Za-z0-9]{4,16}")) {
@@ -106,6 +133,11 @@ public class PaperBoatAuthController {
         if (getByUsername(username) != null) {
             return R.fail(GlobalErrorCode.DATA_DUPLICATE.getCode(), "用户名已存在");
         }
+        // 邮箱验证码强校验（校验通过即失效，防止重放）
+        if (!emailVerifyCodeService.verify(email, emailCode, "register")) {
+            return R.fail(GlobalErrorCode.BAD_REQUEST.getCode(), "邮箱验证码错误或已过期");
+        }
+        email = email.trim().toLowerCase();
         BizUser user = new BizUser();
         user.setUsername(username);
         user.setPassword(passwordEncoder.encode(password));
@@ -197,6 +229,35 @@ public class PaperBoatAuthController {
     }
 
     /**
+     * 找回密码（无需登录，白名单接口）：邮箱验证码校验通过后重置密码
+     * 入参：email / emailCode / newPassword
+     */
+    @PostMapping("/reset-password")
+    public R<Void> resetPassword(@RequestBody Map<String, String> body) {
+        String email = body.get("email");
+        String emailCode = body.get("emailCode");
+        String newPassword = body.get("newPassword");
+        if (email == null || email.trim().isEmpty() || emailCode == null || emailCode.trim().isEmpty()) {
+            return R.fail(GlobalErrorCode.BAD_REQUEST.getCode(), "请输入邮箱和验证码");
+        }
+        if (newPassword == null || newPassword.length() < 6 || newPassword.length() > 50) {
+            return R.fail(GlobalErrorCode.BAD_REQUEST.getCode(), "新密码长度需在6-50之间");
+        }
+        BizUser user = getByEmail(email);
+        if (user == null) {
+            return R.fail(GlobalErrorCode.DATA_NOT_FOUND.getCode(), "该邮箱未绑定任何账号");
+        }
+        // 验证码按 scene=reset 校验（校验通过即失效，防止重放）
+        if (!emailVerifyCodeService.verify(email, emailCode, "reset")) {
+            return R.fail(GlobalErrorCode.BAD_REQUEST.getCode(), "邮箱验证码错误或已过期");
+        }
+        user.setPassword(passwordEncoder.encode(newPassword));
+        bizUserDao.update(user);
+        log.info("传信纸船用户[{}]通过邮箱验证码重置密码", user.getUsername());
+        return R.ok("密码重置成功，请使用新密码登录", null);
+    }
+
+    /**
      * 当前登录用户信息（形状与原 /system/user/info 一致，供前端刷新用户态）
      */
     @GetMapping("/me")
@@ -215,6 +276,7 @@ public class PaperBoatAuthController {
         data.put("username", user.getUsername());
         data.put("realName", user.getNickname());
         data.put("avatar", user.getAvatar());
+        data.put("starCount", user.getStarCount() == null ? 0 : user.getStarCount());
         data.put("roles", Collections.singletonList(USER_ROLE));
         return R.ok(data);
     }
@@ -222,6 +284,15 @@ public class PaperBoatAuthController {
     private BizUser getByUsername(String username) {
         return bizUserDao.selectOneByQuery(QueryWrapper.create()
                 .where(new QueryColumn("username").eq(username)));
+    }
+
+    /** 按邮箱查用户（MySQL默认排序规则不区分大小写；邮箱为空串时不命中） */
+    private BizUser getByEmail(String email) {
+        if (email == null || email.trim().isEmpty()) {
+            return null;
+        }
+        return bizUserDao.selectOneByQuery(QueryWrapper.create()
+                .where(new QueryColumn("email").eq(email.trim().toLowerCase())));
     }
 
     /**

@@ -33,6 +33,10 @@ public interface RedisKeyConstant {
     String OPEN_API_APP = PREFIX + "openapi:app:";
     /** Open-API nonce防重放 */
     String OPEN_API_NONCE = PREFIX + "openapi:nonce:";
+    /** 邮箱验证码 */
+    String EMAIL_CODE = PREFIX + "email:code:";
+    /** 邮箱验证码发送频率限制 */
+    String EMAIL_CODE_LIMIT = PREFIX + "email:code:limit:";
     /** 站内信未读数 */
     String MSG_UNREAD_COUNT = PREFIX + "msg:unread:";
     /** 租户缓存 */

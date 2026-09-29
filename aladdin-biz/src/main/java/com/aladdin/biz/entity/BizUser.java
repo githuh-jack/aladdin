@@ -32,6 +32,8 @@ public class BizUser extends BaseEntity {
     private Integer coins;
     /** 信用分 */
     private Integer creditScore;
+    /** 小星星累计数(每寄出一封信+1) */
+    private Integer starCount;
     /** 状态 1正常 0禁用 */
     private Integer status;
     private Long appId;

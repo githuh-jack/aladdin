@@ -39,4 +39,38 @@ public interface BizUserStampItemDao extends BaseDao<BizUserStampItem> {
             "ORDER BY id LIMIT 1")
     int consumeAvailable(@Param("userId") Long userId, @Param("stampId") Long stampId,
                          @Param("letterId") Long letterId);
+
+    /** 后台邮票列表：全部实例明细(邮票/归属人/使用状态/所用信件) */
+    @Select("<script>" +
+            "SELECT si.id, si.code, si.stamp_id AS stampId, s.name AS stampName, s.image_url AS stampImageUrl, " +
+            "si.user_id AS userId, u.nickname AS userName, u.user_no AS userNo, si.status, " +
+            "si.used_time AS usedTime, si.letter_id AS letterId, l.title AS letterTitle, si.sys001 AS createTime " +
+            "FROM biz_user_stamp_item si " +
+            "LEFT JOIN biz_stamp s ON si.stamp_id = s.id AND s.sys005 = 1 " +
+            "LEFT JOIN biz_user u ON si.user_id = u.id AND u.sys005 = 1 " +
+            "LEFT JOIN biz_letter l ON si.letter_id = l.id AND l.sys005 = 1 " +
+            "WHERE si.sys005 = 1 " +
+            "<if test='keyword != null and keyword != \"\"'>" +
+            "AND (u.nickname LIKE CONCAT('%',#{keyword},'%') OR u.user_no = #{keyword} " +
+            "OR s.name LIKE CONCAT('%',#{keyword},'%') OR si.code LIKE CONCAT('%',#{keyword},'%')) </if>" +
+            "<if test='status != null'>AND si.status = #{status} </if>" +
+            "ORDER BY si.id DESC LIMIT #{limit} OFFSET #{offset}" +
+            "</script>")
+    List<Map<String, Object>> selectAdminItems(@Param("keyword") String keyword,
+                                               @Param("status") Integer status,
+                                               @Param("offset") int offset,
+                                               @Param("limit") int limit);
+
+    /** 后台邮票列表计数 */
+    @Select("<script>" +
+            "SELECT COUNT(*) FROM biz_user_stamp_item si " +
+            "LEFT JOIN biz_stamp s ON si.stamp_id = s.id AND s.sys005 = 1 " +
+            "LEFT JOIN biz_user u ON si.user_id = u.id AND u.sys005 = 1 " +
+            "WHERE si.sys005 = 1 " +
+            "<if test='keyword != null and keyword != \"\"'>" +
+            "AND (u.nickname LIKE CONCAT('%',#{keyword},'%') OR u.user_no = #{keyword} " +
+            "OR s.name LIKE CONCAT('%',#{keyword},'%') OR si.code LIKE CONCAT('%',#{keyword},'%')) </if>" +
+            "<if test='status != null'>AND si.status = #{status} </if>" +
+            "</script>")
+    long countAdminItems(@Param("keyword") String keyword, @Param("status") Integer status);
 }

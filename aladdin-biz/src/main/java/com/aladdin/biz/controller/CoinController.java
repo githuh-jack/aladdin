@@ -68,14 +68,14 @@ public class CoinController {
         return R.ok(new PageResult<>(pageQuery.getPage(), pageQuery.getLimit(), total, list));
     }
 
-    /** 我的订单 */
+    /** 我的订单(仅最近一个月) */
     @GetMapping("/orders")
     public R<List<BizOrder>> orders(PageQuery pageQuery) {
         Long userId = LoginService.getCurrentUserId();
         if (userId == null) {
             throw new BusinessException(GlobalErrorCode.UNAUTHORIZED);
         }
-        return R.ok(orderDao.selectListWithUser(userId, null, null,
+        return R.ok(orderDao.selectMyRecentOrders(userId,
                 pageQuery.getOffset(), pageQuery.getLimit()));
     }
 

@@ -15,17 +15,20 @@ import java.util.List;
  */
 public interface BizCoinLogDao extends BaseDao<BizCoinLog> {
 
+    /** 我的流水(仅最近一个月) */
     @Select("SELECT * FROM biz_coin_log WHERE sys005 = 1 AND user_id = #{userId} " +
+            "AND sys001 >= DATE_SUB(NOW(), INTERVAL 1 MONTH) " +
             "ORDER BY id DESC LIMIT #{limit} OFFSET #{offset}")
     List<BizCoinLog> selectMyLogs(@Param("userId") Long userId,
                                   @Param("offset") int offset,
                                   @Param("limit") int limit);
 
-    @Select("SELECT COUNT(*) FROM biz_coin_log WHERE sys005 = 1 AND user_id = #{userId}")
+    @Select("SELECT COUNT(*) FROM biz_coin_log WHERE sys005 = 1 AND user_id = #{userId} " +
+            "AND sys001 >= DATE_SUB(NOW(), INTERVAL 1 MONTH)")
     long countMyLogs(@Param("userId") Long userId);
 
     @Select("<script>" +
-            "SELECT cl.*, u.nickname AS user_name FROM biz_coin_log cl " +
+            "SELECT cl.*, u.nickname AS user_name, u.user_no AS user_no FROM biz_coin_log cl " +
             "LEFT JOIN biz_user u ON cl.user_id = u.id " +
             "WHERE cl.sys005 = 1 " +
             "<if test='userId != null'>AND cl.user_id = #{userId} </if>" +

@@ -109,8 +109,14 @@ public class DataInitRunner implements ApplicationRunner {
                 new String[]{"/app/paper_boat/coin", "app/paper-boat/coin/index", "铜钱流水", "lucide:coins", "3"},
                 new String[]{"/app/paper_boat/reward", "app/paper-boat/reward/index", "奖励记录", "lucide:gift", "4"},
                 new String[]{"/app/paper_boat/invite", "app/paper-boat/invite/index", "邀请记录", "lucide:user-plus", "5"},
-                new String[]{"/app/paper_boat/bambooLog", "app/paper-boat/bamboo-log/index", "文竹记录", "lucide:sprout", "6"},
-                new String[]{"/app/paper_boat/config", "app/paper-boat/config/index", "应用配置", "lucide:settings", "7"});
+                new String[]{"/app/paper_boat/config", "app/paper-boat/config/index", "应用配置", "lucide:settings", "7"},
+                new String[]{"/app/paper_boat/avatar", "biz/avatar/index", "头像审核", "lucide:image", "8"},
+                new String[]{"/app/paper_boat/stamp", "biz/shop/index", "邮票商城", "lucide:stamp", "9"},
+                new String[]{"/app/paper_boat/stamp_items", "biz/stamp_items/index", "邮票列表", "lucide:list", "10"},
+                new String[]{"/app/paper_boat/order", "biz/order/index", "订单管理", "lucide:shopping-cart", "11"},
+                new String[]{"/app/paper_boat/announcement", "biz/announcement/index", "公告配置", "lucide:megaphone", "12"},
+                new String[]{"/app/paper_boat/sysmail", "biz/sysmail/index", "系统邮件", "lucide:mail-plus", "13"},
+                new String[]{"/app/paper_boat/redeem", "biz/redeem/index", "兑换码", "lucide:ticket", "14"});
         for (String[] m : menus) {
             Integer count = jdbcTemplate.queryForObject(
                     "SELECT COUNT(*) FROM sys_resource WHERE path = ? AND parent_id = ?", Integer.class, m[0], rootId);
@@ -145,6 +151,7 @@ public class DataInitRunner implements ApplicationRunner {
                   `user_no` bigint DEFAULT NULL COMMENT '用户唯一编号(6位,从101322起,邮寄信件凭编号)',
                   `coins` int DEFAULT 0 COMMENT '铜钱余额(文)',
                   `credit_score` int DEFAULT 100 COMMENT '信用分',
+                  `star_count` int DEFAULT 0 COMMENT '小星星累计数(每寄出一封信+1)',
                   `status` int DEFAULT 1,
                   `app_id` bigint DEFAULT NULL COMMENT '所属应用ID',
                   `sys001` datetime DEFAULT NULL,
@@ -190,9 +197,13 @@ public class DataInitRunner implements ApplicationRunner {
                   `status` int DEFAULT 0 COMMENT '0草稿 1已发送 2已读 3已删除',
                   `stamp_id` bigint DEFAULT NULL COMMENT '使用的邮票ID',
                   `envelope_id` bigint DEFAULT NULL COMMENT '使用的信封ID',
+                  `is_public` int DEFAULT 0 COMMENT '0私密 1公开(可在信件广场展示)',
+                  `abnormal` int DEFAULT 0 COMMENT '0正常 1异常(后台标记，异常不上广场)',
                   `send_time` datetime DEFAULT NULL COMMENT '发送时间',
                   `read_time` datetime DEFAULT NULL COMMENT '阅读时间',
                   `arrival_time` datetime DEFAULT NULL COMMENT '到达时间(寄出时间+邮票送达天数，未到时间收件人不可见)',
+                  `return_time` datetime DEFAULT NULL COMMENT '退回到达寄件人时间(退回操作+邮票送达天数，到点寄件人可见已退回)',
+                  `return_reason` varchar(50) DEFAULT NULL COMMENT '退回原因(未找到指定的用户/对方拒收/审核不合格)',
                   `sys001` datetime DEFAULT NULL,
                   `sys002` datetime DEFAULT NULL,
                   `sys003` bigint DEFAULT NULL,
@@ -215,6 +226,7 @@ public class DataInitRunner implements ApplicationRunner {
                   `mood` varchar(20) DEFAULT '' COMMENT '心情',
                   `write_date` date DEFAULT NULL COMMENT '日记日期',
                   `is_public` int DEFAULT 0 COMMENT '0私密 1公开',
+                  `abnormal` int DEFAULT 0 COMMENT '0正常 1异常(后台标记，异常不上广场)',
                   `sys001` datetime DEFAULT NULL,
                   `sys002` datetime DEFAULT NULL,
                   `sys003` bigint DEFAULT NULL,
@@ -389,6 +401,24 @@ public class DataInitRunner implements ApplicationRunner {
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='邀请记录表'
                 """,
                 """
+                CREATE TABLE IF NOT EXISTS `biz_invite_record` (
+                  `id` bigint NOT NULL AUTO_INCREMENT,
+                  `inviter_id` bigint NOT NULL COMMENT '邀请人ID',
+                  `invitee_id` bigint NOT NULL COMMENT '被邀请人ID',
+                  `invite_code` varchar(16) DEFAULT '' COMMENT '使用的邀请码',
+                  `reward_coins` int DEFAULT 0 COMMENT '奖励铜钱(文)',
+                  `sys001` datetime DEFAULT NULL,
+                  `sys002` datetime DEFAULT NULL,
+                  `sys003` bigint DEFAULT NULL,
+                  `sys004` bigint DEFAULT NULL,
+                  `sys005` int DEFAULT 1,
+                  `sys006` varchar(50) DEFAULT NULL,
+                  `sys007` varchar(50) DEFAULT NULL,
+                  PRIMARY KEY (`id`),
+                  KEY `idx_inviter` (`inviter_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='邀请记录'
+                """,
+                """
                 CREATE TABLE IF NOT EXISTS `biz_reward_log` (
                   `id` bigint NOT NULL AUTO_INCREMENT,
                   `user_id` bigint NOT NULL,
@@ -407,42 +437,6 @@ public class DataInitRunner implements ApplicationRunner {
                   PRIMARY KEY (`id`),
                   KEY `idx_user_type_date` (`user_id`, `reward_type`, `reward_date`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='奖励记录表'
-                """,
-                """
-                CREATE TABLE IF NOT EXISTS `biz_bamboo` (
-                  `id` bigint NOT NULL AUTO_INCREMENT,
-                  `user_id` bigint NOT NULL,
-                  `height_cm` int DEFAULT 0 COMMENT '当前高度(cm)',
-                  `sys001` datetime DEFAULT NULL,
-                  `sys002` datetime DEFAULT NULL,
-                  `sys003` bigint DEFAULT NULL,
-                  `sys004` bigint DEFAULT NULL,
-                  `sys005` int DEFAULT 1,
-                  `sys006` varchar(64) DEFAULT '',
-                  `sys007` varchar(64) DEFAULT '',
-                  PRIMARY KEY (`id`),
-                  UNIQUE KEY `uk_user_id` (`user_id`)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户文竹'
-                """,
-                """
-                CREATE TABLE IF NOT EXISTS `biz_bamboo_log` (
-                  `id` bigint NOT NULL AUTO_INCREMENT,
-                  `user_id` bigint NOT NULL,
-                  `biz_type` varchar(20) DEFAULT '' COMMENT 'letter/diary',
-                  `add_cm` int DEFAULT 0 COMMENT '本次生长(cm)',
-                  `content_len` int DEFAULT 0 COMMENT '内容字数',
-                  `ref_id` bigint DEFAULT NULL COMMENT '关联信件/日记ID',
-                  `sys001` datetime DEFAULT NULL,
-                  `sys002` datetime DEFAULT NULL,
-                  `sys003` bigint DEFAULT NULL,
-                  `sys004` bigint DEFAULT NULL,
-                  `sys005` int DEFAULT 1,
-                  `sys006` varchar(64) DEFAULT '',
-                  `sys007` varchar(64) DEFAULT '',
-                  PRIMARY KEY (`id`),
-                  KEY `idx_user_id` (`user_id`),
-                  KEY `idx_sys001` (`sys001`)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文竹生长记录'
                 """,
                 """
                 CREATE TABLE IF NOT EXISTS `biz_login_log` (
@@ -474,6 +468,8 @@ public class DataInitRunner implements ApplicationRunner {
                   `title` varchar(200) NOT NULL COMMENT '公告标题',
                   `content` text COMMENT '公告内容',
                   `status` int DEFAULT 1 COMMENT '0下架 1发布',
+                  `start_time` datetime DEFAULT NULL COMMENT '展示开始时间(空=不限)',
+                  `end_time` datetime DEFAULT NULL COMMENT '展示结束时间(空=不限)',
                   `sys001` datetime DEFAULT NULL,
                   `sys002` datetime DEFAULT NULL,
                   `sys003` bigint DEFAULT NULL,
@@ -489,6 +485,7 @@ public class DataInitRunner implements ApplicationRunner {
                   `id` bigint NOT NULL AUTO_INCREMENT,
                   `title` varchar(200) NOT NULL COMMENT '邮件标题',
                   `content` text COMMENT '邮件内容',
+                  `arrival_time` datetime DEFAULT NULL COMMENT '到达时间(到点后用户信箱可见)',
                   `coin_amount` int DEFAULT 0 COMMENT '附赠铜钱数(0为无)',
                   `stamp_id` bigint DEFAULT NULL COMMENT '附赠邮票ID',
                   `envelope_id` bigint DEFAULT NULL COMMENT '附赠信封ID',
@@ -521,6 +518,69 @@ public class DataInitRunner implements ApplicationRunner {
                   UNIQUE KEY `uk_mail_user` (`mail_id`, `user_id`),
                   KEY `idx_user_id` (`user_id`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户系统邮件'
+                """,
+                """
+                CREATE TABLE IF NOT EXISTS `biz_redeem_code` (
+                  `id` bigint NOT NULL AUTO_INCREMENT,
+                  `code` varchar(32) NOT NULL COMMENT '兑换码',
+                  `coin_amount` int NOT NULL DEFAULT 0 COMMENT '兑换铜钱数',
+                  `max_count` int NOT NULL DEFAULT 1 COMMENT '可兑换总次数',
+                  `used_count` int NOT NULL DEFAULT 0 COMMENT '已兑换次数',
+                  `stamp_id` bigint DEFAULT NULL COMMENT '赠送邮票ID(空=仅铜钱)',
+                  `status` int DEFAULT 1 COMMENT '0停用 1启用',
+                  `sys001` datetime DEFAULT NULL,
+                  `sys002` datetime DEFAULT NULL,
+                  `sys003` bigint DEFAULT NULL,
+                  `sys004` bigint DEFAULT NULL,
+                  `sys005` int DEFAULT 1,
+                  `sys006` varchar(64) DEFAULT '',
+                  `sys007` varchar(64) DEFAULT '',
+                  PRIMARY KEY (`id`),
+                  UNIQUE KEY `uk_code` (`code`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='兑换码配置'
+                """,
+                """
+                CREATE TABLE IF NOT EXISTS `biz_redeem_log` (
+                  `id` bigint NOT NULL AUTO_INCREMENT,
+                  `code_id` bigint NOT NULL COMMENT '兑换码ID',
+                  `code` varchar(32) DEFAULT '' COMMENT '兑换码(快照)',
+                  `user_id` bigint NOT NULL COMMENT '兑换用户ID',
+                  `coin_amount` int NOT NULL DEFAULT 0 COMMENT '兑换铜钱数',
+                  `stamp_id` bigint DEFAULT NULL COMMENT '获赠邮票ID(快照,空=无)',
+                  `sys001` datetime DEFAULT NULL,
+                  `sys002` datetime DEFAULT NULL,
+                  `sys003` bigint DEFAULT NULL,
+                  `sys004` bigint DEFAULT NULL,
+                  `sys005` int DEFAULT 1,
+                  `sys006` varchar(64) DEFAULT '',
+                  `sys007` varchar(64) DEFAULT '',
+                  PRIMARY KEY (`id`),
+                  UNIQUE KEY `uk_code_user` (`code_id`, `user_id`),
+                  KEY `idx_user_id` (`user_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='兑换记录'
+                """,
+                """
+                CREATE TABLE IF NOT EXISTS `biz_email_send_log` (
+                  `id` bigint NOT NULL AUTO_INCREMENT,
+                  `email` varchar(128) NOT NULL COMMENT '收件邮箱',
+                  `scene` varchar(32) DEFAULT '' COMMENT '用途场景(register注册/bind绑定/reset重置密码等)',
+                  `code` varchar(10) DEFAULT '' COMMENT '验证码',
+                  `status` int DEFAULT 0 COMMENT '0失败 1发送成功',
+                  `fail_reason` varchar(255) DEFAULT '' COMMENT '失败原因(发送失败时)',
+                  `send_time` datetime DEFAULT NULL COMMENT '发送时间',
+                  `expire_time` datetime DEFAULT NULL COMMENT '验证码过期时间',
+                  `client_ip` varchar(64) DEFAULT '' COMMENT '请求IP',
+                  `sys001` datetime DEFAULT NULL,
+                  `sys002` datetime DEFAULT NULL,
+                  `sys003` bigint DEFAULT NULL,
+                  `sys004` bigint DEFAULT NULL,
+                  `sys005` int DEFAULT 1,
+                  `sys006` varchar(64) DEFAULT '',
+                  `sys007` varchar(64) DEFAULT '',
+                  PRIMARY KEY (`id`),
+                  KEY `idx_email` (`email`),
+                  KEY `idx_send_time` (`send_time`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='邮箱验证码发送记录'
                 """);
         return String.join(";\n\n", ddls) + ";";
     }
@@ -638,7 +698,7 @@ public class DataInitRunner implements ApplicationRunner {
             return;
         }
         jdbcTemplate.update("INSERT INTO sys_user (username, password, nickname, email, phone, dept_id, status, sys001, sys003, sys005, sys006) VALUES " +
-                "('user01', '123456', '普通用户', 'user01@aladdin.com', '13800138001', 2, 1, NOW(), 1, 1, 'system')");
+                "('user01', '123456', '普通用户', 'user01@aladdin.com', '13800138001', 1, 1, NOW(), 1, 1, 'system')");
         log.info("初始化普通用户完成");
     }
 

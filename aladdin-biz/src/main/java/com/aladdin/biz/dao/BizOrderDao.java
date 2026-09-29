@@ -16,7 +16,7 @@ import java.util.List;
 public interface BizOrderDao extends BaseDao<BizOrder> {
 
     @Select("<script>" +
-            "SELECT o.*, u.nickname AS user_name FROM biz_order o " +
+            "SELECT o.*, u.nickname AS user_name, u.user_no AS user_no FROM biz_order o " +
             "LEFT JOIN biz_user u ON o.user_id = u.id " +
             "WHERE o.sys005 = 1 " +
             "<if test='userId != null'>AND o.user_id = #{userId} </if>" +
@@ -29,6 +29,16 @@ public interface BizOrderDao extends BaseDao<BizOrder> {
                                       @Param("status") Integer status,
                                       @Param("offset") int offset,
                                       @Param("limit") int limit);
+
+    /** 我的订单(仅最近一个月) */
+    @Select("SELECT o.*, u.nickname AS user_name FROM biz_order o " +
+            "LEFT JOIN biz_user u ON o.user_id = u.id " +
+            "WHERE o.sys005 = 1 AND o.user_id = #{userId} " +
+            "AND o.sys001 >= DATE_SUB(NOW(), INTERVAL 1 MONTH) " +
+            "ORDER BY o.id DESC LIMIT #{limit} OFFSET #{offset}")
+    List<BizOrder> selectMyRecentOrders(@Param("userId") Long userId,
+                                        @Param("offset") int offset,
+                                        @Param("limit") int limit);
 
     @Select("<script>" +
             "SELECT COUNT(*) FROM biz_order o WHERE o.sys005 = 1 " +

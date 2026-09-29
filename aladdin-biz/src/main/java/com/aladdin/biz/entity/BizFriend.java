@@ -34,4 +34,9 @@ public class BizFriend extends BaseEntity {
     private String friendName;
     @com.mybatisflex.annotation.Column(ignore = true)
     private String friendAvatar;
+    /** 发起方昵称/编号(管理端展示) */
+    @com.mybatisflex.annotation.Column(ignore = true)
+    private String userName;
+    @com.mybatisflex.annotation.Column(ignore = true)
+    private Long userNo;
 }

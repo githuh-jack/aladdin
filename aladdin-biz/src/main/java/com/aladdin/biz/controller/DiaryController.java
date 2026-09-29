@@ -43,11 +43,11 @@ public class DiaryController {
                 pageQuery.getOffset(), pageQuery.getLimit()));
     }
 
-    /** 公开广场(仅当天) */
+    /** 公开广场(最新的公开日记，不限于当天) */
     @GetMapping("/public")
     public R<List<BizDiary>> publicList(PageQuery pageQuery,
                                         @RequestParam(required = false) String keyWord) {
-        return R.ok(diaryDao.selectListWithUser(null, 1, keyWord, true,
+        return R.ok(diaryDao.selectListWithUser(null, 1, keyWord, false,
                 pageQuery.getOffset(), pageQuery.getLimit()));
     }
 
@@ -79,7 +79,7 @@ public class DiaryController {
         diary.setSys005(1);
         diary.setSys006("biz");
         diaryDao.insert(diary);
-        // 当日写日记奖励 + 文竹生长(每天最多1cm)
+        // 当日写日记奖励
         rewardService.onDiaryCreated(userId, diary.getId(), diary.getContent());
         return R.ok();
     }
@@ -124,5 +124,21 @@ public class DiaryController {
                                        @RequestParam(required = false) String keyWord) {
         return R.ok(diaryDao.selectListWithUser(userId, null, keyWord, false,
                 pageQuery.getOffset(), pageQuery.getLimit()));
+    }
+
+    /** 管理员: 标记/取消异常日记(异常日记不会出现在日记广场) */
+    @PostMapping("/admin/markAbnormal/{id}")
+    @PreAuthorize("hasRole('ROLE_admin')")
+    public R<Void> adminMarkAbnormal(@PathVariable Long id,
+                                     @RequestParam Integer abnormal) {
+        BizDiary diary = diaryDao.selectOneById(id);
+        if (diary == null) {
+            throw new BusinessException(GlobalErrorCode.DATA_NOT_FOUND);
+        }
+        BizDiary update = new BizDiary();
+        update.setId(id);
+        update.setAbnormal(abnormal != null && abnormal == 1 ? 1 : 0);
+        diaryDao.update(update);
+        return R.ok();
     }
 }

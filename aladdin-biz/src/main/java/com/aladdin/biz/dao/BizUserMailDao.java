@@ -18,14 +18,25 @@ import java.util.Map;
 public interface BizUserMailDao extends BaseDao<BizUserMail> {
 
     @Select("SELECT um.id, um.mail_id AS mailId, um.user_id AS userId, um.claimed, um.claim_time AS claimTime, " +
-            "m.title, m.content, m.coin_amount AS coinAmount, m.stamp_id AS stampId, m.envelope_id AS envelopeId, " +
+            "m.title, m.content, m.arrival_time AS arrivalTime, " +
+            "m.coin_amount AS coinAmount, m.stamp_id AS stampId, m.envelope_id AS envelopeId, " +
             "s.name AS stampName, e.name AS envelopeName, m.sys001 AS sendTime " +
             "FROM biz_user_mail um " +
             "INNER JOIN biz_sys_mail m ON um.mail_id = m.id " +
             "LEFT JOIN biz_stamp s ON m.stamp_id = s.id " +
             "LEFT JOIN biz_envelope e ON m.envelope_id = e.id " +
-            "WHERE um.sys005 = 1 AND um.user_id = #{userId} ORDER BY um.id DESC")
+            "WHERE um.sys005 = 1 AND um.user_id = #{userId} " +
+            "AND (m.arrival_time IS NULL OR m.arrival_time <= NOW()) " +
+            "ORDER BY um.id DESC")
     List<Map<String, Object>> selectMyMails(@Param("userId") Long userId);
+
+    /** 后台查看单封系统邮件的送达/领取记录 */
+    @Select("SELECT um.id, um.user_id AS userId, u.user_no AS userNo, u.nickname AS nickname, " +
+            "um.claimed, um.claim_time AS claimTime " +
+            "FROM biz_user_mail um " +
+            "LEFT JOIN biz_user u ON um.user_id = u.id AND u.sys005 = 1 " +
+            "WHERE um.sys005 = 1 AND um.mail_id = #{mailId} ORDER BY um.id DESC LIMIT 1000")
+    List<Map<String, Object>> selectMailRecipients(@Param("mailId") Long mailId);
 
     /** 领取附件(幂等锁)：仅未领取时置为已领取 */
     @Update("UPDATE biz_user_mail SET claimed = 1, claim_time = NOW() " +

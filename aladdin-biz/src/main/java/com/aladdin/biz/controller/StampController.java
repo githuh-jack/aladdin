@@ -3,6 +3,8 @@ package com.aladdin.biz.controller;
 import com.aladdin.biz.dao.BizStampDao;
 import com.aladdin.biz.dao.BizUserStampItemDao;
 import com.aladdin.biz.entity.BizStamp;
+import com.aladdin.common.core.domain.PageQuery;
+import com.aladdin.common.core.domain.PageResult;
 import com.aladdin.common.core.domain.R;
 import com.aladdin.common.core.exception.BusinessException;
 import com.aladdin.common.core.exception.GlobalErrorCode;
@@ -95,6 +97,18 @@ public class StampController {
     @PreAuthorize("hasAuthority('biz:stamp:list') or hasRole('ROLE_admin')")
     public R<List<BizStamp>> adminList() {
         return R.ok(stampDao.selectAllList());
+    }
+
+    /** 管理员: 邮票列表(实例明细：什么邮票、谁买的、是否使用、所用信件) */
+    @GetMapping("/admin/items")
+    @PreAuthorize("hasAuthority('biz:stamp:list') or hasRole('ROLE_admin')")
+    public R<PageResult<Map<String, Object>>> adminItems(PageQuery pageQuery,
+                                                         @RequestParam(required = false) String keyword,
+                                                         @RequestParam(required = false) Integer status) {
+        List<Map<String, Object>> list = userStampItemDao.selectAdminItems(keyword, status,
+                pageQuery.getOffset(), pageQuery.getLimit());
+        long total = userStampItemDao.countAdminItems(keyword, status);
+        return R.ok(new PageResult<>(pageQuery.getPage(), pageQuery.getLimit(), total, list));
     }
 
     @PostMapping("/admin/add")

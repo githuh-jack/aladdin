@@ -46,7 +46,11 @@ aladdin:
       - /auth/logout
       - /auth/userInfo
       - /biz/auth/register
+      - /biz/auth/send-code
+      - /biz/auth/reset-password
       - /biz/auth/login
+      - /biz/diary/public
+      - /biz/letter/public/**
       - /sso/**
       - /verifyCode/**
       - /css/**

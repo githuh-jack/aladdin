@@ -68,7 +68,12 @@ public interface BizFriendDao extends BaseDao<BizFriend> {
             "AND user_id = #{userId} AND friend_id = #{friendId} LIMIT 1")
     BizFriend selectMyRelationTo(@Param("userId") Long userId, @Param("friendId") Long friendId);
 
-    /** 管理员: 查询所有好友关系 */
-    @Select("SELECT * FROM biz_friend WHERE sys005 = 1 ORDER BY id DESC")
+    /** 管理员: 查询所有好友关系(带发起方昵称/编号、对方昵称) */
+    @Select("SELECT f.*, u.nickname AS user_name, u.user_no AS user_no, " +
+            "fu.nickname AS friend_name " +
+            "FROM biz_friend f " +
+            "LEFT JOIN biz_user u ON f.user_id = u.id " +
+            "LEFT JOIN biz_user fu ON f.friend_id = fu.id " +
+            "WHERE f.sys005 = 1 ORDER BY f.id DESC")
     List<BizFriend> selectAllList();
 }

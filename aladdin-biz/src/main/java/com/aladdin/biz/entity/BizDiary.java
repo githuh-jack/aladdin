@@ -30,7 +30,15 @@ public class BizDiary extends BaseEntity {
 
     /** 0私密 1公开 */
     private Integer isPublic;
+    /** 0正常 1异常(后台标记，异常不上广场) */
+    private Integer abnormal;
 
     @com.mybatisflex.annotation.Column(ignore = true)
     private String userName;
+
+    @com.mybatisflex.annotation.Column(ignore = true)
+    private Long userNo;
+
+    @com.mybatisflex.annotation.Column(ignore = true)
+    private String userAvatar;
 }

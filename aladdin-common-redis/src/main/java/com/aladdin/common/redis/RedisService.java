@@ -64,6 +64,21 @@ public class RedisService {
         return null;
     }
 
+    /** 字符串值写入(stringRedisTemplate，与 getString 配对；勿与 set 混用——value 序列化不同) */
+    public void setString(String key, String value, long timeout, TimeUnit unit) {
+        if (redisAvailable) {
+            stringRedisTemplate.opsForValue().set(key, value, timeout, unit);
+        }
+    }
+
+    /** 字符串键删除(stringRedisTemplate，与 setString/getString 配对) */
+    public Boolean deleteString(String key) {
+        if (redisAvailable) {
+            return stringRedisTemplate.delete(key);
+        }
+        return false;
+    }
+
     public Boolean delete(String key) {
         if (redisAvailable) {
             return redisTemplate.delete(key);

@@ -296,8 +296,6 @@ public class ProfileController {
         profileDao.insert(profile);
         // 信用分初始记录
         addCreditLog(userId, 100, 100, "注册赠送100信用分");
-        // 每个用户一株文竹
-        rewardService.ensureBamboo(userId);
         // 注册时填写了邀请码，绑定邀请关系并奖励邀请人
         bindInviteIfNeeded(userId);
         return profile;

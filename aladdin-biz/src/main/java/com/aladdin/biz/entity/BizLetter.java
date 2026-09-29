@@ -33,6 +33,10 @@ public class BizLetter extends BaseEntity {
     private Long stampId;
     /** 使用的信封ID */
     private Long envelopeId;
+    /** 0私密 1公开(可在信件广场展示) */
+    private Integer isPublic;
+    /** 0正常 1异常(后台标记，异常不上广场) */
+    private Integer abnormal;
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
     private LocalDateTime sendTime;
@@ -44,11 +48,24 @@ public class BizLetter extends BaseEntity {
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
     private LocalDateTime arrivalTime;
 
+    /** 退回到达寄件人时间(退回操作+邮票送达天数，到点寄件人可见已退回) */
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
+    private LocalDateTime returnTime;
+
+    /** 退回原因(未找到指定的用户/对方拒收/审核不合格) */
+    private String returnReason;
+
     // ===== 展示用冗余字段（不映射DB列） =====
     @com.mybatisflex.annotation.Column(ignore = true)
     private String senderName;
     @com.mybatisflex.annotation.Column(ignore = true)
+    private String senderAvatar;
+    @com.mybatisflex.annotation.Column(ignore = true)
+    private Long senderNo;
+    @com.mybatisflex.annotation.Column(ignore = true)
     private String receiverName;
+    @com.mybatisflex.annotation.Column(ignore = true)
+    private Long receiverNo;
     @com.mybatisflex.annotation.Column(ignore = true)
     private String stampName;
     @com.mybatisflex.annotation.Column(ignore = true)

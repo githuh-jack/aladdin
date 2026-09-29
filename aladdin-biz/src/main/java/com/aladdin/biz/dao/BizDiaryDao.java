@@ -15,19 +15,27 @@ import java.util.List;
  */
 public interface BizDiaryDao extends BaseDao<BizDiary> {
 
-    @Select("SELECT d.*, u.nickname AS user_name FROM biz_diary d " +
+    @Select("SELECT d.*, u.nickname AS user_name, u.user_no AS user_no, " +
+            "CASE WHEN p.avatar_status = 2 THEN p.avatar_url ELSE NULL END AS user_avatar " +
+            "FROM biz_diary d " +
             "LEFT JOIN biz_user u ON d.user_id = u.id " +
+            "LEFT JOIN biz_user_profile p ON p.user_id = u.id " +
             "WHERE d.id = #{id} AND d.sys005 = 1")
     BizDiary selectDetailById(@Param("id") Long id);
 
     @Select("<script>" +
-            "SELECT d.*, u.nickname AS user_name FROM biz_diary d " +
+            "SELECT d.*, u.nickname AS user_name, u.user_no AS user_no, " +
+            "CASE WHEN p.avatar_status = 2 THEN p.avatar_url ELSE NULL END AS user_avatar " +
+            "FROM biz_diary d " +
             "LEFT JOIN biz_user u ON d.user_id = u.id " +
+            "LEFT JOIN biz_user_profile p ON p.user_id = u.id " +
             "WHERE d.sys005 = 1 " +
             "<if test='userId != null'>AND d.user_id = #{userId} </if>" +
             "<if test='isPublic != null'>AND d.is_public = #{isPublic} </if>" +
+            "<if test=\"isPublic != null and isPublic == 1\">AND d.abnormal = 0 </if>" +
             "<if test='onlyToday'>AND d.write_date = CURDATE() </if>" +
-            "<if test='keyWord != null and keyWord != \"\"'>AND d.title LIKE CONCAT('%',#{keyWord},'%') </if>" +
+            "<if test='keyWord != null and keyWord != \"\"'>AND (d.title LIKE CONCAT('%',#{keyWord},'%') " +
+            "OR d.content LIKE CONCAT('%',#{keyWord},'%')) </if>" +
             "ORDER BY d.id DESC LIMIT #{limit} OFFSET #{offset}" +
             "</script>")
     List<BizDiary> selectListWithUser(@Param("userId") Long userId,

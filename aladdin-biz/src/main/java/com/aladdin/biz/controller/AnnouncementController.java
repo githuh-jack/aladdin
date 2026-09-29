@@ -46,6 +46,10 @@ public class AnnouncementController {
         if (announcement.getTitle() == null || announcement.getTitle().trim().isEmpty()) {
             return R.fail(GlobalErrorCode.BAD_REQUEST.getCode(), "公告标题不能为空");
         }
+        if (announcement.getStartTime() != null && announcement.getEndTime() != null
+                && announcement.getEndTime().isBefore(announcement.getStartTime())) {
+            return R.fail(GlobalErrorCode.BAD_REQUEST.getCode(), "结束时间不能早于开始时间");
+        }
         announcement.setSys001(LocalDateTime.now());
         announcement.setSys005(1);
         announcement.setSys006("biz");
@@ -56,6 +60,10 @@ public class AnnouncementController {
     @PostMapping("/admin/edit")
     @PreAuthorize("hasAuthority('biz:announcement:edit') or hasRole('ROLE_admin')")
     public R<Void> edit(@RequestBody BizAnnouncement announcement) {
+        if (announcement.getStartTime() != null && announcement.getEndTime() != null
+                && announcement.getEndTime().isBefore(announcement.getStartTime())) {
+            return R.fail(GlobalErrorCode.BAD_REQUEST.getCode(), "结束时间不能早于开始时间");
+        }
         announcement.setSys002(LocalDateTime.now());
         announcementDao.update(announcement);
         return R.ok();

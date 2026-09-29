@@ -1,7 +1,5 @@
 package com.aladdin.biz.controller;
 
-import com.aladdin.biz.dao.BizEnvelopeDao;
-import com.aladdin.biz.dao.BizStampDao;
 import com.aladdin.biz.dao.BizSysMailDao;
 import com.aladdin.biz.dao.BizUserDao;
 import com.aladdin.biz.dao.BizUserEnvelopeItemDao;
@@ -46,12 +44,6 @@ public class SysMailController {
 
     @Autowired
     private BizUserDao userDao;
-
-    @Autowired
-    private BizStampDao stampDao;
-
-    @Autowired
-    private BizEnvelopeDao envelopeDao;
 
     @Autowired
     private BizUserStampItemDao userStampItemDao;
@@ -118,9 +110,16 @@ public class SysMailController {
         return R.ok(sysMailDao.selectAdminList());
     }
 
+    /** 后台: 单封邮件的送达/领取记录 */
+    @GetMapping("/admin/records/{id}")
+    @PreAuthorize("hasAuthority('biz:mail:list') or hasRole('ROLE_admin')")
+    public R<List<Map<String, Object>>> records(@PathVariable Long id) {
+        return R.ok(userMailDao.selectMailRecipients(id));
+    }
+
     /**
      * 给全体用户发送系统邮件
-     * body: {title, content, coinAmount?, stampId?, envelopeId?} 至少附赠一种
+     * body: {title, content, arrivalTime?} 到达时间不填则立即送达；不再附赠铜钱/邮票/信封
      */
     @PostMapping("/admin/send")
     @PreAuthorize("hasAuthority('biz:mail:send') or hasRole('ROLE_admin')")
@@ -128,16 +127,16 @@ public class SysMailController {
         if (mail.getTitle() == null || mail.getTitle().trim().isEmpty()) {
             throw new BusinessException(GlobalErrorCode.BAD_REQUEST, "邮件标题不能为空");
         }
-        boolean hasCoin = mail.getCoinAmount() != null && mail.getCoinAmount() > 0;
-        if (!hasCoin && mail.getStampId() == null && mail.getEnvelopeId() == null) {
-            throw new BusinessException(GlobalErrorCode.BAD_REQUEST, "请至少附赠铜钱、邮票或信封其中一种");
+        if (mail.getContent() == null || mail.getContent().trim().isEmpty()) {
+            throw new BusinessException(GlobalErrorCode.BAD_REQUEST, "邮件内容不能为空");
         }
-        if (mail.getStampId() != null && stampDao.selectOneById(mail.getStampId()) == null) {
-            throw new BusinessException(GlobalErrorCode.BAD_REQUEST, "附赠的邮票不存在");
+        // 到达时间不填立即送达；新邮件不再附赠
+        if (mail.getArrivalTime() == null) {
+            mail.setArrivalTime(LocalDateTime.now());
         }
-        if (mail.getEnvelopeId() != null && envelopeDao.selectOneById(mail.getEnvelopeId()) == null) {
-            throw new BusinessException(GlobalErrorCode.BAD_REQUEST, "附赠的信封不存在");
-        }
+        mail.setCoinAmount(null);
+        mail.setStampId(null);
+        mail.setEnvelopeId(null);
         mail.setSenderId(LoginService.getCurrentUserId());
         mail.setSys001(LocalDateTime.now());
         mail.setSys005(1);

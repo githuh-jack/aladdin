@@ -33,7 +33,7 @@ public class ConfigService {
         }
     }
 
-    /** 读取逗号分隔的整型数组配置(如文竹生长阈值)，缺失时返回默认值 */
+    /** 读取逗号分隔的整型数组配置，缺失时返回默认值 */
     public int[] getIntArray(String key, int[] defaultValue) {
         BizConfig config = configDao.selectOneByQuery(QueryWrapper.create()
                 .where(new QueryColumn("config_key").eq(key)));

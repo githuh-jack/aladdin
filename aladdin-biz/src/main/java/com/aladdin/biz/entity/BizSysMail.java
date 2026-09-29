@@ -1,12 +1,15 @@
 package com.aladdin.biz.entity;
 
 import com.aladdin.common.core.domain.BaseEntity;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import com.mybatisflex.annotation.Table;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
+import java.time.LocalDateTime;
+
 /**
- * 系统邮件(管理员发送，可附赠铜钱/邮票/信封)
+ * 系统邮件(管理员发送，到达时间到点后进入用户信箱；历史版本支持附赠，新邮件不再附赠)
  *
  * @author cles
  * @date 2026/09/24
@@ -20,7 +23,10 @@ public class BizSysMail extends BaseEntity {
     private String title;
     /** 邮件内容 */
     private String content;
-    /** 附赠铜钱数(0为无) */
+    /** 到达时间(到点后用户信箱可见) */
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
+    private LocalDateTime arrivalTime;
+    /** 附赠铜钱数(历史数据) */
     private Integer coinAmount;
     /** 附赠邮票ID */
     private Long stampId;

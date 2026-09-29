@@ -44,6 +44,15 @@ mybatis-flex:
 
 biz:
   avatar-dir: ./uploads/avatar
+  # 邮箱验证码SMTP配置(QQ邮箱：网页版设置-账号 开启POP3/SMTP服务后生成授权码填入password)
+  email:
+    host: smtp.qq.com
+    port: 465
+    ssl: true
+    username: yunxinxiaozhan@foxmail.com
+    password: "smmjzjllkjvfdeid"          # SMTP授权码，生成后填这里
+    expire-minutes: 5     # 验证码有效期(分钟)
+    resend-seconds: 60    # 同邮箱重发间隔(秒)
 
 aladdin:
   security:
@@ -53,6 +62,8 @@ aladdin:
       - /auth/logout
       - /auth/userInfo
       - /biz/auth/register
+      - /biz/auth/send-code
+      - /biz/auth/reset-password
       - /biz/auth/login
       - /sso/**
       - /verifyCode/**

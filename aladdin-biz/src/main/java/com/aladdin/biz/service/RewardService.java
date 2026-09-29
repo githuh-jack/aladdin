@@ -1,14 +1,11 @@
 package com.aladdin.biz.service;
 
-import com.aladdin.biz.dao.BizBambooDao;
-import com.aladdin.biz.dao.BizBambooLogDao;
 import com.aladdin.biz.dao.BizCheckinRecordDao;
 import com.aladdin.biz.dao.BizCoinDao;
 import com.aladdin.biz.dao.BizCoinLogDao;
 import com.aladdin.biz.dao.BizDiaryDao;
 import com.aladdin.biz.dao.BizLetterDao;
-import com.aladdin.biz.entity.BizBamboo;
-import com.aladdin.biz.entity.BizBambooLog;
+import com.aladdin.biz.dao.BizUserDao;
 import com.aladdin.biz.entity.BizCheckinRecord;
 import com.aladdin.biz.entity.BizCoin;
 import com.aladdin.biz.entity.BizCoinLog;
@@ -19,7 +16,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
- * 奖励服务：铜钱奖励(每日登录/连续签到/首信/首日记/完善资料/邀请)与文竹生长
+ * 奖励服务：铜钱奖励(每日登录/连续签到/首信/首日记/完善资料/邀请)与小星星(每寄一封信+1)
  * 金额均来自 biz_config 配置表，后台可修改
  *
  * @author cles
@@ -38,10 +35,7 @@ public class RewardService {
     private BizCheckinRecordDao checkinDao;
 
     @Autowired
-    private BizBambooDao bambooDao;
-
-    @Autowired
-    private BizBambooLogDao bambooLogDao;
+    private BizUserDao userDao;
 
     @Autowired
     private BizLetterDao letterDao;
@@ -163,7 +157,7 @@ public class RewardService {
     // ==================== 写信 / 写日记 ====================
 
     /**
-     * 寄出信件后调用：当日第一封信奖励 + 文竹按字数生长
+     * 寄出信件后调用：当日第一封信奖励 + 小星星+1(每封信都有)
      */
     public void onLetterSent(Long userId, Long letterId, String content) {
         try {
@@ -174,18 +168,14 @@ public class RewardService {
                     addCoins(userId, reward, "reward", "当日第一封信奖励");
                 }
             }
-            int len = content == null ? 0 : content.length();
-            int cm = letterBambooCm(len);
-            if (cm > 0) {
-                growBamboo(userId, cm, "letter", len, letterId);
-            }
+            userDao.addStar(userId);
         } catch (Exception ignored) {
-            // 奖励/生长失败不影响写信主流程
+            // 奖励失败不影响写信主流程
         }
     }
 
     /**
-     * 新建日记后调用：当日写日记奖励 + 文竹生长(每天最多1cm)
+     * 新建日记后调用：当日写日记奖励
      */
     public void onDiaryCreated(Long userId, Long diaryId, String content) {
         try {
@@ -196,63 +186,8 @@ public class RewardService {
                     addCoins(userId, reward, "reward", "当日写日记奖励");
                 }
             }
-            int threshold = configService.getInt("bamboo.diary.threshold", 100);
-            int maxCm = configService.getInt("bamboo.diary.daily_max_cm", 1);
-            int len = content == null ? 0 : content.length();
-            if (maxCm > 0 && len >= threshold
-                    && bambooLogDao.countDiaryGrowthToday(userId, start) == 0) {
-                growBamboo(userId, maxCm, "diary", len, diaryId);
-            }
         } catch (Exception ignored) {
-            // 奖励/生长失败不影响写日记主流程
-        }
-    }
-
-    /** 信件文竹生长：达到各字数档位各+1cm，单封最多 thresholds 档(默认1500字/5cm) */
-    private int letterBambooCm(int len) {
-        int[] thresholds = configService.getIntArray("bamboo.letter.thresholds",
-                new int[]{100, 300, 600, 1000, 1500});
-        int cm = 0;
-        for (int threshold : thresholds) {
-            if (len >= threshold) {
-                cm++;
-            }
-        }
-        return cm;
-    }
-
-    /** 文竹长高并写生长记录(仅后台可见) */
-    private void growBamboo(Long userId, int cm, String type, int len, Long refId) {
-        ensureBamboo(userId);
-        if (bambooDao.grow(userId, cm) == 0) {
-            return;
-        }
-        BizBambooLog log = new BizBambooLog();
-        log.setUserId(userId);
-        log.setBizType(type);
-        log.setAddCm(cm);
-        log.setContentLen(len);
-        log.setRefId(refId);
-        log.setSys001(LocalDateTime.now());
-        log.setSys005(1);
-        log.setSys006("biz");
-        bambooLogDao.insert(log);
-    }
-
-    /** 确保用户有文竹(每个用户一株) */
-    public void ensureBamboo(Long userId) {
-        if (bambooDao.selectByUserId(userId) == null) {
-            BizBamboo bamboo = new BizBamboo();
-            bamboo.setUserId(userId);
-            bamboo.setHeightCm(0);
-            bamboo.setSys001(LocalDateTime.now());
-            bamboo.setSys005(1);
-            bamboo.setSys006("biz");
-            try {
-                bambooDao.insert(bamboo);
-            } catch (Exception ignored) {
-                // 并发下已由其他请求创建
-            }
+            // 奖励失败不影响写日记主流程
         }
     }
 

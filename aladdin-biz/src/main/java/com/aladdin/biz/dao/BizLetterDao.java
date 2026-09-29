@@ -38,12 +38,12 @@ public interface BizLetterDao extends BaseDao<BizLetter> {
                                    @Param("limit") int limit);
 
     /**
-     * 查询收件箱(带发件人昵称，只显示已过到达时间的信件)
+     * 查询收件箱(带发件人昵称，只显示已过到达时间的信件；已退回status=4的信不再展示给收件人)
      */
     @Select("<script>" +
             "SELECT l.*, u.nickname AS sender_name FROM biz_letter l " +
             "LEFT JOIN biz_user u ON l.sender_id = u.id " +
-            "WHERE l.sys005 = 1 AND l.receiver_id = #{receiverId} AND l.status != 3 " +
+            "WHERE l.sys005 = 1 AND l.receiver_id = #{receiverId} AND l.status NOT IN (3, 4) " +
             "AND (l.arrival_time IS NULL OR l.arrival_time &lt;= NOW()) " +
             "<if test='status != null'>AND l.status = #{status} </if>" +
             "ORDER BY (CASE WHEN l.status = 1 THEN 0 ELSE 1 END), l.id DESC LIMIT #{limit} OFFSET #{offset}" +
@@ -61,7 +61,7 @@ public interface BizLetterDao extends BaseDao<BizLetter> {
             "FROM biz_letter l " +
             "LEFT JOIN biz_user su ON l.sender_id = su.id " +
             "LEFT JOIN biz_user ru ON l.receiver_id = ru.id " +
-            "WHERE l.sys005 = 1 AND l.receiver_id = #{userId} AND l.status != 3 " +
+            "WHERE l.sys005 = 1 AND l.receiver_id = #{userId} AND l.status NOT IN (3, 4) " +
             "AND (l.arrival_time IS NULL OR l.arrival_time <= NOW()) " +
             "UNION ALL " +
             "SELECT l.*, su.nickname AS sender_name, ru.nickname AS receiver_name, 0 AS box_recv " +
@@ -103,6 +103,20 @@ public interface BizLetterDao extends BaseDao<BizLetter> {
     List<Map<String, Object>> selectRecentWriters(@Param("limit") int limit);
 
     /**
+     * 信件广场：设置公开的信件，最新 limit 条(游客可看)
+     * 键为驼峰：id/title/content/sendTime/senderId/senderName/avatarUrl
+     */
+    @Select("SELECT l.id, l.title, l.content, l.send_time AS send_time, " +
+            "su.id AS sender_id, su.nickname AS sender_name, " +
+            "CASE WHEN p.avatar_status = 2 THEN p.avatar_url ELSE NULL END AS avatar_url " +
+            "FROM biz_letter l " +
+            "LEFT JOIN biz_user su ON l.sender_id = su.id " +
+            "LEFT JOIN biz_user_profile p ON p.user_id = su.id " +
+            "WHERE l.sys005 = 1 AND l.status = 1 AND l.is_public = 1 AND l.abnormal = 0 AND su.sys005 = 1 " +
+            "ORDER BY l.send_time DESC LIMIT #{limit}")
+    List<Map<String, Object>> selectPublicLetters(@Param("limit") int limit);
+
+    /**
      * 随机挑选一位可寄送的用户(排除自己、禁用用户及拉黑我的人)
      */
     @Select("SELECT u.id FROM biz_user u " +
@@ -112,10 +126,11 @@ public interface BizLetterDao extends BaseDao<BizLetter> {
     Long selectRandomReceiver(@Param("userId") Long userId);
 
     /**
-     * 管理员: 查询所有信件
+     * 管理员: 查询所有信件(支持笔名/编号关键字)
      */
     @Select("<script>" +
-            "SELECT l.*, su.nickname AS sender_name, ru.nickname AS receiver_name, " +
+            "SELECT l.*, su.nickname AS sender_name, su.user_no AS sender_no, " +
+            "ru.nickname AS receiver_name, ru.user_no AS receiver_no, " +
             "s.name AS stamp_name, e.name AS envelope_name " +
             "FROM biz_letter l " +
             "LEFT JOIN biz_user su ON l.sender_id = su.id " +
@@ -125,17 +140,31 @@ public interface BizLetterDao extends BaseDao<BizLetter> {
             "WHERE l.sys005 = 1 " +
             "<if test='senderId != null'>AND l.sender_id = #{senderId} </if>" +
             "<if test='receiverId != null'>AND l.receiver_id = #{receiverId} </if>" +
+            "<if test='keyword != null and keyword != \"\"'>" +
+            "AND (su.nickname LIKE CONCAT('%',#{keyword},'%') " +
+            "OR ru.nickname LIKE CONCAT('%',#{keyword},'%') " +
+            "OR su.user_no = #{keyword} OR ru.user_no = #{keyword}) </if>" +
             "ORDER BY l.id DESC LIMIT #{limit} OFFSET #{offset}" +
             "</script>")
     List<BizLetter> selectAdminList(@Param("senderId") Long senderId,
                                     @Param("receiverId") Long receiverId,
+                                    @Param("keyword") String keyword,
                                     @Param("offset") int offset,
                                     @Param("limit") int limit);
 
     @Select("<script>" +
-            "SELECT COUNT(*) FROM biz_letter l WHERE l.sys005 = 1 " +
+            "SELECT COUNT(*) FROM biz_letter l " +
+            "LEFT JOIN biz_user su ON l.sender_id = su.id " +
+            "LEFT JOIN biz_user ru ON l.receiver_id = ru.id " +
+            "WHERE l.sys005 = 1 " +
             "<if test='senderId != null'>AND l.sender_id = #{senderId} </if>" +
             "<if test='receiverId != null'>AND l.receiver_id = #{receiverId} </if>" +
+            "<if test='keyword != null and keyword != \"\"'>" +
+            "AND (su.nickname LIKE CONCAT('%',#{keyword},'%') " +
+            "OR ru.nickname LIKE CONCAT('%',#{keyword},'%') " +
+            "OR su.user_no = #{keyword} OR ru.user_no = #{keyword}) </if>" +
             "</script>")
-    long countAdminList(@Param("senderId") Long senderId, @Param("receiverId") Long receiverId);
+    long countAdminList(@Param("senderId") Long senderId,
+                        @Param("receiverId") Long receiverId,
+                        @Param("keyword") String keyword);
 }
