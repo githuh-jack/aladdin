@@ -52,4 +52,9 @@ public interface BizUserDao extends BaseDao<BizUser> {
     /** 每寄出一封信+1颗小星星 */
     @Update("UPDATE biz_user SET star_count = star_count + 1, sys002 = NOW() WHERE id = #{userId} AND sys005 = 1")
     int addStar(@Param("userId") Long userId);
+
+    /** 登记禁闭处罚：写禁闭天数并清空起算时间(待用户领取处罚邮件时重新起算) */
+    @Update("UPDATE biz_user SET confine_days = #{days}, confine_start = NULL, sys002 = NOW() " +
+            "WHERE id = #{userId} AND sys005 = 1")
+    int resetConfine(@Param("userId") Long userId, @Param("days") Integer days);
 }

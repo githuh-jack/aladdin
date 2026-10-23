@@ -3,12 +3,15 @@ package com.aladdin.biz.service;
 import com.aladdin.biz.dao.BizCheckinRecordDao;
 import com.aladdin.biz.dao.BizCoinDao;
 import com.aladdin.biz.dao.BizCoinLogDao;
+import com.aladdin.biz.dao.BizCreditLogDao;
 import com.aladdin.biz.dao.BizDiaryDao;
 import com.aladdin.biz.dao.BizLetterDao;
 import com.aladdin.biz.dao.BizUserDao;
 import com.aladdin.biz.entity.BizCheckinRecord;
 import com.aladdin.biz.entity.BizCoin;
 import com.aladdin.biz.entity.BizCoinLog;
+import com.aladdin.biz.entity.BizCreditLog;
+import com.aladdin.biz.entity.BizUser;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -33,6 +36,9 @@ public class RewardService {
 
     @Autowired
     private BizCheckinRecordDao checkinDao;
+
+    @Autowired
+    private BizCreditLogDao creditLogDao;
 
     @Autowired
     private BizUserDao userDao;
@@ -84,6 +90,36 @@ public class RewardService {
                 // 并发下已由其他请求创建
             }
         }
+    }
+
+    // ==================== 信用分 ====================
+
+    /**
+     * 调整信用分并写流水(delta可正可负，下限0；用户不存在或delta=0忽略)
+     */
+    public void adjustCredit(Long userId, int delta, String reason) {
+        if (userId == null || delta == 0) {
+            return;
+        }
+        BizUser user = userDao.selectOneById(userId);
+        if (user == null) {
+            return;
+        }
+        int current = user.getCreditScore() == null ? 100 : user.getCreditScore();
+        int balance = Math.max(0, current + delta);
+        BizUser update = new BizUser();
+        update.setId(userId);
+        update.setCreditScore(balance);
+        userDao.update(update);
+        BizCreditLog log = new BizCreditLog();
+        log.setUserId(userId);
+        log.setChangeVal(delta);
+        log.setBalance(balance);
+        log.setReason(reason);
+        log.setSys001(LocalDateTime.now());
+        log.setSys005(1);
+        log.setSys006("biz");
+        creditLogDao.insert(log);
     }
 
     // ==================== 每日登录 + 连续签到 ====================

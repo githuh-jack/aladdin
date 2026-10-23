@@ -54,6 +54,9 @@ public class SysMailController {
     @Autowired
     private RewardService rewardService;
 
+    @Autowired
+    private com.aladdin.biz.service.ReportService reportService;
+
     /** 我的系统邮件 */
     @GetMapping("/list")
     public R<List<Map<String, Object>>> list() {
@@ -62,6 +65,24 @@ public class SysMailController {
             throw new BusinessException(GlobalErrorCode.UNAUTHORIZED);
         }
         return R.ok(userMailDao.selectMyMails(userId));
+    }
+
+    /**
+     * 查看/领取邮件(幂等，打开邮件详情时调用)
+     * 若为举报处罚通知邮件，此刻开始计算禁闭天数
+     */
+    @PostMapping("/read/{id}")
+    public R<Void> read(@PathVariable Long id) {
+        Long userId = LoginService.getCurrentUserId();
+        if (userId == null) {
+            throw new BusinessException(GlobalErrorCode.UNAUTHORIZED);
+        }
+        BizUserMail um = userMailDao.selectOneById(id);
+        if (um == null || !userId.equals(um.getUserId())) {
+            throw new BusinessException(GlobalErrorCode.DATA_NOT_FOUND);
+        }
+        reportService.onPunishMailViewed(userId, um.getMailId());
+        return R.ok();
     }
 
     /** 读取邮件时领取附赠(幂等，每人只领一次) */

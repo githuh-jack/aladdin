@@ -1,9 +1,12 @@
 package com.aladdin.biz.entity;
 
 import com.aladdin.common.core.domain.BaseEntity;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import com.mybatisflex.annotation.Table;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
+
+import java.time.LocalDateTime;
 
 /**
  * 传信纸船用户
@@ -34,6 +37,11 @@ public class BizUser extends BaseEntity {
     private Integer creditScore;
     /** 小星星累计数(每寄出一封信+1) */
     private Integer starCount;
+    /** 禁闭天数(0=无，举报处罚期间不能寄信) */
+    private Integer confineDays;
+    /** 禁闭起算时间(领取/查看处罚通知邮件时写入) */
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
+    private LocalDateTime confineStart;
     /** 状态 1正常 0禁用 */
     private Integer status;
     private Long appId;

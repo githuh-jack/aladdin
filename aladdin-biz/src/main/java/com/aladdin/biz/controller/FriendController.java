@@ -37,6 +37,35 @@ public class FriendController {
         return R.ok(friendDao.selectMyFriends(userId));
     }
 
+    /** 设置好友备注 body: {remark} */
+    @PostMapping("/remark/{id}")
+    public R<Void> remark(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+        Long userId = LoginService.getCurrentUserId();
+        if (userId == null) {
+            throw new BusinessException(GlobalErrorCode.UNAUTHORIZED);
+        }
+        BizFriend friend = friendDao.selectOneById(id);
+        if (friend == null) {
+            throw new BusinessException(GlobalErrorCode.DATA_NOT_FOUND);
+        }
+        // 只有关系发起方可以改自己这边的备注
+        if (!userId.equals(friend.getUserId())) {
+            throw new BusinessException(GlobalErrorCode.FORBIDDEN);
+        }
+        if (!Integer.valueOf(1).equals(friend.getStatus())) {
+            throw new BusinessException(GlobalErrorCode.BAD_REQUEST, "仅好友可以设置备注");
+        }
+        String remark = body.get("remark") == null ? "" : body.get("remark").toString().trim();
+        if (remark.length() > 50) {
+            throw new BusinessException(GlobalErrorCode.BAD_REQUEST, "备注最多50个字符");
+        }
+        BizFriend update = new BizFriend();
+        update.setId(id);
+        update.setRemark(remark);
+        friendDao.update(update);
+        return R.ok();
+    }
+
     /** 我收到的好友申请(待处理) */
     @GetMapping("/applies")
     public R<List<BizFriend>> applies() {

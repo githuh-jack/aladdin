@@ -23,12 +23,13 @@ public interface BizLetterDao extends BaseDao<BizLetter> {
     long countSentToday(@Param("senderId") Long senderId, @Param("start") LocalDateTime start);
 
     /**
-     * 查询发件箱(带收件人昵称)
+     * 查询发件箱(带收件人昵称)；退回中的信件(status=4)在 return_time 到点前对寄件人不可见
      */
     @Select("<script>" +
             "SELECT l.*, u.nickname AS receiver_name FROM biz_letter l " +
             "LEFT JOIN biz_user u ON l.receiver_id = u.id " +
             "WHERE l.sys005 = 1 AND l.sender_id = #{senderId} AND l.status != 3 " +
+            "AND (l.status != 4 OR (l.return_time IS NOT NULL AND l.return_time &lt;= NOW())) " +
             "<if test='status != null'>AND l.status = #{status} </if>" +
             "ORDER BY l.id DESC LIMIT #{limit} OFFSET #{offset}" +
             "</script>")
@@ -69,6 +70,7 @@ public interface BizLetterDao extends BaseDao<BizLetter> {
             "LEFT JOIN biz_user su ON l.sender_id = su.id " +
             "LEFT JOIN biz_user ru ON l.receiver_id = ru.id " +
             "WHERE l.sys005 = 1 AND l.sender_id = #{userId} AND l.status != 3 " +
+            "AND (l.status != 4 OR (l.return_time IS NOT NULL AND l.return_time <= NOW())) " +
             ") t " +
             "ORDER BY (CASE WHEN t.box_recv = 1 AND t.status = 1 THEN 0 ELSE 1 END), t.send_time DESC, t.id DESC " +
             "LIMIT #{limit} OFFSET #{offset}")
@@ -167,4 +169,27 @@ public interface BizLetterDao extends BaseDao<BizLetter> {
     long countAdminList(@Param("senderId") Long senderId,
                         @Param("receiverId") Long receiverId,
                         @Param("keyword") String keyword);
+
+    /**
+     * 我与某位好友的来往信件(双向，各按自身可见性过滤，最新100封)
+     * 收到的：已到达且未退回；寄出的：未删除，退回中的需 return_time 到点
+     */
+    @Select("SELECT * FROM (" +
+            "SELECT l.*, su.nickname AS sender_name, ru.nickname AS receiver_name, 1 AS box_recv " +
+            "FROM biz_letter l " +
+            "LEFT JOIN biz_user su ON l.sender_id = su.id " +
+            "LEFT JOIN biz_user ru ON l.receiver_id = ru.id " +
+            "WHERE l.sys005 = 1 AND l.sender_id = #{friendId} AND l.receiver_id = #{userId} " +
+            "AND l.status NOT IN (0, 3, 4) " +
+            "AND (l.arrival_time IS NULL OR l.arrival_time <= NOW()) " +
+            "UNION ALL " +
+            "SELECT l.*, su.nickname AS sender_name, ru.nickname AS receiver_name, 0 AS box_recv " +
+            "FROM biz_letter l " +
+            "LEFT JOIN biz_user su ON l.sender_id = su.id " +
+            "LEFT JOIN biz_user ru ON l.receiver_id = ru.id " +
+            "WHERE l.sys005 = 1 AND l.sender_id = #{userId} AND l.receiver_id = #{friendId} " +
+            "AND l.status NOT IN (0, 3) " +
+            "AND (l.status != 4 OR (l.return_time IS NOT NULL AND l.return_time <= NOW())) " +
+            ") t ORDER BY t.send_time DESC, t.id DESC LIMIT 100")
+    List<BizLetter> selectHistory(@Param("userId") Long userId, @Param("friendId") Long friendId);
 }

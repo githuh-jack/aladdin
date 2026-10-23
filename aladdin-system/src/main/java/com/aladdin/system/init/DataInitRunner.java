@@ -116,7 +116,8 @@ public class DataInitRunner implements ApplicationRunner {
                 new String[]{"/app/paper_boat/order", "biz/order/index", "订单管理", "lucide:shopping-cart", "11"},
                 new String[]{"/app/paper_boat/announcement", "biz/announcement/index", "公告配置", "lucide:megaphone", "12"},
                 new String[]{"/app/paper_boat/sysmail", "biz/sysmail/index", "系统邮件", "lucide:mail-plus", "13"},
-                new String[]{"/app/paper_boat/redeem", "biz/redeem/index", "兑换码", "lucide:ticket", "14"});
+                new String[]{"/app/paper_boat/redeem", "biz/redeem/index", "兑换码", "lucide:ticket", "14"},
+                new String[]{"/app/paper_boat/feedback", "biz/feedback/index", "问题反馈", "lucide:message-square", "15"});
         for (String[] m : menus) {
             Integer count = jdbcTemplate.queryForObject(
                     "SELECT COUNT(*) FROM sys_resource WHERE path = ? AND parent_id = ?", Integer.class, m[0], rootId);
@@ -558,6 +559,28 @@ public class DataInitRunner implements ApplicationRunner {
                   UNIQUE KEY `uk_code_user` (`code_id`, `user_id`),
                   KEY `idx_user_id` (`user_id`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='兑换记录'
+                """,
+                """
+                CREATE TABLE IF NOT EXISTS `biz_feedback` (
+                  `id` bigint NOT NULL AUTO_INCREMENT,
+                  `user_id` bigint NOT NULL COMMENT '反馈用户ID',
+                  `content` varchar(1000) NOT NULL COMMENT '反馈内容',
+                  `contact` varchar(50) DEFAULT '' COMMENT '联系方式(选填)',
+                  `reply` varchar(1000) DEFAULT NULL COMMENT '处理回复',
+                  `status` int DEFAULT 0 COMMENT '0待处理 1已处理',
+                  `coin_amount` int DEFAULT 0 COMMENT '赠送铜钱数(0=未赠送)',
+                  `admin_id` bigint DEFAULT NULL COMMENT '处理管理员ID',
+                  `handle_time` datetime DEFAULT NULL COMMENT '处理时间',
+                  `sys001` datetime DEFAULT NULL,
+                  `sys002` datetime DEFAULT NULL,
+                  `sys003` bigint DEFAULT NULL,
+                  `sys004` bigint DEFAULT NULL,
+                  `sys005` int DEFAULT 1,
+                  `sys006` varchar(64) DEFAULT '',
+                  `sys007` varchar(64) DEFAULT '',
+                  PRIMARY KEY (`id`),
+                  KEY `idx_user_id` (`user_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='问题反馈'
                 """,
                 """
                 CREATE TABLE IF NOT EXISTS `biz_email_send_log` (

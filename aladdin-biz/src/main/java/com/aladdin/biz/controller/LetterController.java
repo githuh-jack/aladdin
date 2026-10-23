@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -111,6 +112,17 @@ public class LetterController {
         letter.setIsPublic(isPublic ? 1 : 0);
         String action = (String) body.getOrDefault("action", "draft");
         if ("send".equals(action)) {
+            // 禁闭校验：举报处罚期间不能寄信(禁闭从领取处罚通知邮件起算)
+            BizUser senderUser = userDao.selectOneById(userId);
+            if (senderUser != null && senderUser.getConfineDays() != null && senderUser.getConfineDays() > 0
+                    && senderUser.getConfineStart() != null) {
+                LocalDateTime confineEnd = senderUser.getConfineStart().plusDays(senderUser.getConfineDays());
+                if (LocalDateTime.now().isBefore(confineEnd)) {
+                    long remainDays = (java.time.Duration.between(LocalDateTime.now(), confineEnd).toHours() + 23) / 24;
+                    throw new BusinessException(GlobalErrorCode.BAD_REQUEST,
+                            "您正处于禁闭中，还剩" + remainDays + "天不能寄信");
+                }
+            }
             // 随机模式：由系统随机挑选一位收信人
             boolean random = Boolean.parseBoolean(String.valueOf(body.getOrDefault("random", "false")));
             if (random && letter.getReceiverId() == null) {
@@ -148,6 +160,33 @@ public class LetterController {
                 letter.setReturnReason("未找到指定的用户");
                 letter.setReturnTime(letter.getArrivalTime());
             }
+            // 多选好友群发：receiverIds 非空时逐人寄一封，每人消耗一枚邮票(及一张信纸)
+            List<Long> multiReceiverIds = parseReceiverIds(body.get("receiverIds"));
+            if (!multiReceiverIds.isEmpty()) {
+                if (multiReceiverIds.size() > 20) {
+                    throw new BusinessException(GlobalErrorCode.BAD_REQUEST, "单次最多寄给20位好友");
+                }
+                letter.setSys001(LocalDateTime.now());
+                letter.setSys005(1);
+                letter.setSys006("biz");
+                boolean first = true;
+                for (Long rid : multiReceiverIds) {
+                    if (rid.equals(userId)) {
+                        throw new BusinessException(GlobalErrorCode.BAD_REQUEST, "不能给自己寄信");
+                    }
+                    if (friendDao.selectBlackRelation(rid, userId) != null) {
+                        throw new BusinessException(GlobalErrorCode.FORBIDDEN, "名单中有已将你拉黑的好友，无法寄出");
+                    }
+                    BizLetter target = first ? letter : copyLetter(letter);
+                    target.setReceiverId(rid);
+                    letterDao.insert(target);
+                    // 每封信各自消耗一枚邮票(及信纸)，不足则整体回滚
+                    consumeLetterAssets(userId, target);
+                    rewardService.onLetterSent(userId, target.getId(), target.getContent());
+                    first = false;
+                }
+                return R.ok(letter);
+            }
         } else {
             letter.setStatus(0);
         }
@@ -158,17 +197,69 @@ public class LetterController {
         // 寄出后消耗票实例：每张邮票有使用状态，已使用的不能再次用于寄信；
         // 先落信件再消耗可回填 letter_id，消耗失败整体回滚
         if (letter.getStatus() != null && letter.getStatus() == 1) {
-            if (userStampItemDao.consumeAvailable(userId, letter.getStampId(), letter.getId()) == 0) {
-                throw new BusinessException(GlobalErrorCode.BAD_REQUEST, "该邮票可用数量不足");
-            }
-            if (letter.getEnvelopeId() != null
-                    && userEnvelopeItemDao.consumeAvailable(userId, letter.getEnvelopeId(), letter.getId()) == 0) {
-                throw new BusinessException(GlobalErrorCode.BAD_REQUEST, "该信封可用数量不足");
-            }
+            consumeLetterAssets(userId, letter);
             // 当日第一封信奖励 + 小星星+1(仅寄出的信)
             rewardService.onLetterSent(userId, letter.getId(), letter.getContent());
         }
         return R.ok(letter);
+    }
+
+    /** 解析群发收件人ID列表(去重保序) */
+    private static List<Long> parseReceiverIds(Object obj) {
+        List<Long> ids = new java.util.ArrayList<>();
+        if (!(obj instanceof Collection)) {
+            return ids;
+        }
+        for (Object o : (Collection<?>) obj) {
+            if (o == null || "".equals(o.toString())) continue;
+            ids.add(Long.valueOf(o.toString()));
+        }
+        return ids.stream().distinct().collect(java.util.stream.Collectors.toList());
+    }
+
+    /** 复制群发信件模板(收件人外字段一致) */
+    private static BizLetter copyLetter(BizLetter src) {
+        BizLetter c = new BizLetter();
+        c.setSenderId(src.getSenderId());
+        c.setReceiverAddress(src.getReceiverAddress());
+        c.setTitle(src.getTitle());
+        c.setContent(src.getContent());
+        c.setStatus(src.getStatus());
+        c.setStampId(src.getStampId());
+        c.setEnvelopeId(src.getEnvelopeId());
+        c.setIsPublic(src.getIsPublic());
+        c.setSendTime(src.getSendTime());
+        c.setArrivalTime(src.getArrivalTime());
+        c.setReturnReason(src.getReturnReason());
+        c.setReturnTime(src.getReturnTime());
+        c.setSys001(src.getSys001());
+        c.setSys005(src.getSys005());
+        c.setSys006(src.getSys006());
+        return c;
+    }
+
+    /** 寄出消耗：一枚邮票(必须)与一张信纸(若贴了)，不足抛异常回滚 */
+    private void consumeLetterAssets(Long userId, BizLetter letter) {
+        if (userStampItemDao.consumeAvailable(userId, letter.getStampId(), letter.getId()) == 0) {
+            throw new BusinessException(GlobalErrorCode.BAD_REQUEST, "该邮票可用数量不足");
+        }
+        if (letter.getEnvelopeId() != null
+                && userEnvelopeItemDao.consumeAvailable(userId, letter.getEnvelopeId(), letter.getId()) == 0) {
+            throw new BusinessException(GlobalErrorCode.BAD_REQUEST, "该信封可用数量不足");
+        }
+    }
+
+    /** 我与好友的来往信件(双向，仅好友关系可查) */
+    @GetMapping("/history/{friendId}")
+    public R<List<BizLetter>> history(@PathVariable Long friendId) {
+        Long userId = LoginService.getCurrentUserId();
+        if (userId == null) {
+            throw new BusinessException(GlobalErrorCode.UNAUTHORIZED);
+        }
+        if (friendDao.selectFriendRelation(userId, friendId) == null) {
+            throw new BusinessException(GlobalErrorCode.FORBIDDEN, "仅好友之间可以查看来往信件");
+        }
+        return R.ok(letterDao.selectHistory(userId, friendId));
     }
 
     /** 发件箱 */

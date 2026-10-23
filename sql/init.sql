@@ -754,6 +754,8 @@ CREATE TABLE IF NOT EXISTS `biz_user` (
   `coins` int(11) DEFAULT '0' COMMENT '铜钱余额(文)',
   `credit_score` int(11) DEFAULT '100' COMMENT '信用分',
   `star_count` int(11) DEFAULT '0' COMMENT '小星星累计数(每寄出一封信+1)',
+  `confine_days` int(11) DEFAULT '0' COMMENT '禁闭天数(0=无，举报处罚不能寄信)',
+  `confine_start` datetime DEFAULT NULL COMMENT '禁闭起算时间(领取/查看处罚通知邮件时写入)',
   `status` int(11) DEFAULT '1',
   `app_id` bigint(20) DEFAULT NULL COMMENT '所属应用ID',
   `sys001` datetime DEFAULT NULL,
@@ -849,6 +851,28 @@ CREATE TABLE IF NOT EXISTS `biz_redeem_log` (
   KEY `idx_user_id` (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='兑换记录';
 
+-- 琛細问题反馈(biz_feedback)
+CREATE TABLE IF NOT EXISTS `biz_feedback` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `user_id` bigint(20) NOT NULL COMMENT '反馈用户ID',
+  `content` varchar(1000) NOT NULL COMMENT '反馈内容',
+  `contact` varchar(50) DEFAULT '' COMMENT '联系方式(选填)',
+  `reply` varchar(1000) DEFAULT NULL COMMENT '处理回复',
+  `status` int(11) DEFAULT '0' COMMENT '0待处理 1已处理',
+  `coin_amount` int(11) DEFAULT '0' COMMENT '赠送铜钱数(0=未赠送)',
+  `admin_id` bigint(20) DEFAULT NULL COMMENT '处理管理员ID',
+  `handle_time` datetime DEFAULT NULL COMMENT '处理时间',
+  `sys001` datetime DEFAULT NULL,
+  `sys002` datetime DEFAULT NULL,
+  `sys003` bigint(20) DEFAULT NULL,
+  `sys004` bigint(20) DEFAULT NULL,
+  `sys005` int(11) DEFAULT '1',
+  `sys006` varchar(64) DEFAULT '',
+  `sys007` varchar(64) DEFAULT '',
+  PRIMARY KEY (`id`),
+  KEY `idx_user_id` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='问题反馈';
+
 -- 琛細user profile(biz_user_profile)
 CREATE TABLE IF NOT EXISTS `biz_user_profile` (
   `id` bigint(20) NOT NULL AUTO_INCREMENT,
@@ -896,6 +920,75 @@ CREATE TABLE IF NOT EXISTS `biz_user_stamp_item` (
   KEY `idx_user_id` (`user_id`),
   KEY `idx_stamp_id` (`stamp_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='user stamp item';
+
+-- 表：信件举报(biz_report)
+CREATE TABLE IF NOT EXISTS `biz_report` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `letter_id` bigint(20) NOT NULL COMMENT '被举报信件ID',
+  `reporter_id` bigint(20) NOT NULL COMMENT '举报人ID(收件人)',
+  `reported_id` bigint(20) NOT NULL COMMENT '被举报人ID(信件发件人)',
+  `category` varchar(30) NOT NULL COMMENT '举报选项(垃圾广告/辱骂攻击/色情低俗/违法违规/诈骗钓鱼/泄露隐私/其他)',
+  `description` varchar(500) DEFAULT '' COMMENT '其他说明(选其他时必填)',
+  `status` int(11) DEFAULT '0' COMMENT '0待处理 1已处理',
+  `reward_coins` int(11) DEFAULT '0' COMMENT '奖励举报人铜钱数',
+  `reward_stamp_id` bigint(20) DEFAULT NULL COMMENT '奖励举报人邮票ID',
+  `reward_credit` int(11) DEFAULT '0' COMMENT '奖励举报人信用分',
+  `reward_medal_id` bigint(20) DEFAULT NULL COMMENT '奖励举报人奖章ID',
+  `confine_days` int(11) DEFAULT '0' COMMENT '被举报人禁闭天数(0=不禁闭)',
+  `confine_started` int(11) DEFAULT '0' COMMENT '禁闭是否已起算(0待领取处罚邮件 1已起算)',
+  `deduct_credit` int(11) DEFAULT '0' COMMENT '被举报人扣减信用分',
+  `reporter_mail_id` bigint(20) DEFAULT NULL COMMENT '发给举报人的回复邮件ID',
+  `reported_mail_id` bigint(20) DEFAULT NULL COMMENT '发给被举报人的处罚通知邮件ID',
+  `admin_id` bigint(20) DEFAULT NULL COMMENT '处理管理员ID',
+  `handle_time` datetime DEFAULT NULL COMMENT '处理时间',
+  `handle_remark` varchar(200) DEFAULT '' COMMENT '处理备注',
+  `sys001` datetime DEFAULT NULL,
+  `sys002` datetime DEFAULT NULL,
+  `sys003` bigint(20) DEFAULT NULL,
+  `sys004` bigint(20) DEFAULT NULL,
+  `sys005` int(11) DEFAULT '1',
+  `sys006` varchar(64) DEFAULT '',
+  `sys007` varchar(64) DEFAULT '',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_letter_reporter` (`letter_id`,`reporter_id`),
+  KEY `idx_reported_id` (`reported_id`),
+  KEY `idx_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='信件举报';
+
+-- 表：奖章定义(biz_medal)
+CREATE TABLE IF NOT EXISTS `biz_medal` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `name` varchar(50) NOT NULL COMMENT '奖章名称',
+  `icon` varchar(500) DEFAULT '' COMMENT '奖章图标URL',
+  `description` varchar(200) DEFAULT '' COMMENT '奖章说明',
+  `status` int(11) DEFAULT '1' COMMENT '0停用 1启用',
+  `sys001` datetime DEFAULT NULL,
+  `sys002` datetime DEFAULT NULL,
+  `sys003` bigint(20) DEFAULT NULL,
+  `sys004` bigint(20) DEFAULT NULL,
+  `sys005` int(11) DEFAULT '1',
+  `sys006` varchar(64) DEFAULT '',
+  `sys007` varchar(64) DEFAULT '',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='奖章定义';
+
+-- 表：用户奖章(biz_user_medal)
+CREATE TABLE IF NOT EXISTS `biz_user_medal` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `user_id` bigint(20) NOT NULL COMMENT '用户ID',
+  `medal_id` bigint(20) NOT NULL COMMENT '奖章ID',
+  `source` varchar(30) DEFAULT '' COMMENT '来源(report_reward举报奖励)',
+  `sys001` datetime DEFAULT NULL,
+  `sys002` datetime DEFAULT NULL,
+  `sys003` bigint(20) DEFAULT NULL,
+  `sys004` bigint(20) DEFAULT NULL,
+  `sys005` int(11) DEFAULT '1',
+  `sys006` varchar(64) DEFAULT '',
+  `sys007` varchar(64) DEFAULT '',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_user_medal` (`user_id`,`medal_id`),
+  KEY `idx_medal_id` (`medal_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='用户奖章';
 
 -- ================================================================
 -- 触发器：注册 sys_user 时初始化铜钱账户（金额取 biz_config: reward.register）
@@ -1006,7 +1099,10 @@ INSERT INTO `sys_resource` (`id`, `resource_name`, `parent_id`, `sort`, `path`, 
 (50, '订单管理', 39, 11, '/app/paper_boat/order', 'biz/order/index', 'M', 'app:paperBoat:list', 'lucide:shopping-cart', 1, NOW(), 1, 1, 'system'),
 (51, '公告配置', 39, 12, '/app/paper_boat/announcement', 'biz/announcement/index', 'M', 'app:paperBoat:list', 'lucide:megaphone', 1, NOW(), 1, 1, 'system'),
 (52, '系统邮件', 39, 13, '/app/paper_boat/sysmail', 'biz/sysmail/index', 'M', 'app:paperBoat:list', 'lucide:mail-plus', 1, NOW(), 1, 1, 'system'),
-(53, '兑换码', 39, 14, '/app/paper_boat/redeem', 'biz/redeem/index', 'M', 'app:paperBoat:list', 'lucide:ticket', 1, NOW(), 1, 1, 'system');
+(53, '兑换码', 39, 14, '/app/paper_boat/redeem', 'biz/redeem/index', 'M', 'app:paperBoat:list', 'lucide:ticket', 1, NOW(), 1, 1, 'system'),
+(54, '问题反馈', 39, 15, '/app/paper_boat/feedback', 'biz/feedback/index', 'M', 'app:paperBoat:list', 'lucide:message-square', 1, NOW(), 1, 1, 'system'),
+(55, '举报管理', 39, 16, '/app/paper_boat/report', 'biz/report/index', 'M', 'app:paperBoat:list', 'lucide:flag', 1, NOW(), 1, 1, 'system'),
+(56, '奖章管理', 39, 17, '/app/paper_boat/medal', 'biz/medal/index', 'M', 'app:paperBoat:list', 'lucide:medal', 1, NOW(), 1, 1, 'system');
 
 -- 数据：用户-角色关联
 INSERT INTO `sys_user_role` (`user_id`, `role_id`) VALUES
@@ -1022,7 +1118,8 @@ INSERT INTO `sys_role_resource` (`role_id`, `resource_id`) VALUES
 (1, 29), (1, 30), (1, 31), (1, 32), (1, 33), (1, 34),
 (1, 35), (1, 36), (1, 37), (1, 38),
 (1, 39), (1, 40), (1, 41), (1, 42), (1, 43), (1, 44), (1, 46),
-(1, 47), (1, 48), (1, 49), (1, 50), (1, 51), (1, 52), (1, 53),
+(1, 47), (1, 48), (1, 49), (1, 50), (1, 51), (1, 52), (1, 53), (1, 54),
+(1, 55), (1, 56),
 (2, 1), (2, 2), (2, 3), (2, 5), (2, 6), (2, 32), (2, 33), (2, 34);
 
 -- 数据：字典类型(与 DataInitRunner.initDictData 播种的4类对齐)
@@ -1078,3 +1175,9 @@ INSERT INTO `biz_stamp` (`name`, `description`, `image_url`, `price`, `stock`, `
 INSERT INTO `biz_envelope` (`name`, `description`, `image_url`, `price`, `stock`, `envelope_type`, `status`, `sys001`, `sys003`, `sys005`, `sys006`) VALUES
 ('普通信封', '牛皮纸普通信封', '', 5, 200, '普通', 1, NOW(), 1, 1, 'system'),
 ('精美印花信封', '印花装饰信封', '', 20, 100, '精美', 1, NOW(), 1, 1, 'system');
+
+-- 数据：预置奖章(处理举报时可发放给举报人)
+INSERT IGNORE INTO `biz_medal` (`id`, `name`, `icon`, `description`, `status`, `sys001`, `sys003`, `sys005`, `sys006`) VALUES
+(1, '正义信使', '', '举报违规信件有功，颁发给正义的举报人', 1, NOW(), 1, 1, 'system'),
+(2, '邮政之光', '', '维护纸船信箱纯净的荣誉勋章', 1, NOW(), 1, 1, 'system'),
+(3, '守信之星', '', '诚实守信、信用良好的用户勋章', 1, NOW(), 1, 1, 'system');
