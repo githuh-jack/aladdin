@@ -10,6 +10,7 @@ import com.aladdin.system.entity.SysMenu;
 import com.aladdin.system.entity.SysResource;
 import com.aladdin.system.service.SysMenuService;
 import com.aladdin.system.service.SysResourceService;
+import com.aladdin.system.pm.controller.PmMenuProvider;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
@@ -31,10 +32,13 @@ public class SysMenuController {
 
     private final SysResourceService sysResourceService;
     private final SysMenuService sysMenuService;
+    private final PmMenuProvider pmMenuProvider;
 
-    public SysMenuController(SysResourceService sysResourceService, SysMenuService sysMenuService) {
+    public SysMenuController(SysResourceService sysResourceService, SysMenuService sysMenuService,
+                             PmMenuProvider pmMenuProvider) {
         this.sysResourceService = sysResourceService;
         this.sysMenuService = sysMenuService;
+        this.pmMenuProvider = pmMenuProvider;
     }
 
     /**
@@ -47,6 +51,10 @@ public class SysMenuController {
         Long userId = LoginService.getCurrentUserId();
         if (userId == null) {
             return R.fail(GlobalErrorCode.UNAUTHORIZED);
+        }
+        // pm用户(pm_user id>=200000)：按角色返回/app/pm菜单子集
+        if (PmMenuProvider.isPmUser(userId)) {
+            return R.ok(pmMenuProvider.getRoutes(userId));
         }
         List<SysResource> resources = sysResourceService.getResourcesByUserId(userId);
         // 服务层返回的是树(仅根节点+children)，先拍平成扁平列表再按M类型过滤，

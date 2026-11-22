@@ -19,8 +19,10 @@ import java.time.LocalDateTime;
 @Table("biz_report")
 public class BizReport extends BaseEntity {
 
-    /** 被举报信件ID */
+    /** 被举报目标ID(信件ID/日记ID，兼容历史列名 letter_id) */
     private Long letterId;
+    /** 举报目标类型 letter=信件 diary=日记(历史数据默认letter) */
+    private String targetType;
     /** 举报人ID(收件人) */
     private Long reporterId;
     /** 被举报人ID(信件发件人) */
@@ -61,6 +63,12 @@ public class BizReport extends BaseEntity {
     // ===== 展示用冗余字段（不映射DB列） =====
     @com.mybatisflex.annotation.Column(ignore = true)
     private String letterTitle;
+    /** 举报目标标题(按target_type取信件或日记标题) */
+    @com.mybatisflex.annotation.Column(ignore = true)
+    private String targetTitle;
+    /** 举报目标内容(按target_type取信件或日记内容) */
+    @com.mybatisflex.annotation.Column(ignore = true)
+    private String targetContent;
     @com.mybatisflex.annotation.Column(ignore = true)
     private String reporterName;
     @com.mybatisflex.annotation.Column(ignore = true)

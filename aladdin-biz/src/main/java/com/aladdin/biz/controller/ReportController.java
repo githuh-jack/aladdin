@@ -50,6 +50,21 @@ public class ReportController {
         return R.ok("举报已提交，我们会尽快核实处理", report);
     }
 
+    /** 用户举报日记 body: {diaryId, category, description?} */
+    @PostMapping("/diary")
+    @Transactional(rollbackFor = Exception.class)
+    public R<BizReport> reportDiary(@RequestBody Map<String, Object> body) {
+        Long userId = LoginService.getCurrentUserId();
+        if (userId == null) {
+            throw new BusinessException(GlobalErrorCode.UNAUTHORIZED);
+        }
+        Long diaryId = parseLong(body.get("diaryId"));
+        String category = body.get("category") == null ? null : body.get("category").toString();
+        String description = body.get("description") == null ? "" : body.get("description").toString();
+        BizReport report = reportService.submitDiary(userId, diaryId, category, description);
+        return R.ok("举报已提交，我们会尽快核实处理", report);
+    }
+
     /** 我的举报列表(含处理结果) */
     @GetMapping("/mine")
     public R<List<BizReport>> mine() {

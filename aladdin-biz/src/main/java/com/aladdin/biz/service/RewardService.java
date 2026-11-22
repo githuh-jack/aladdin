@@ -13,10 +13,13 @@ import com.aladdin.biz.entity.BizCoinLog;
 import com.aladdin.biz.entity.BizCreditLog;
 import com.aladdin.biz.entity.BizUser;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * 奖励服务：铜钱奖励(每日登录/连续签到/首信/首日记/完善资料/邀请)与小星星(每寄一封信+1)
@@ -139,17 +142,19 @@ public class RewardService {
     }
 
     /**
-     * 每日首次活动签到：发放每日登录奖励，连续签到满7/30天发额外奖励
-     * 由拦截器在用户当日首个业务请求时触发，每日限1次
+     * 每日签到：发放每日登录奖励，连续签到满7/30天发额外奖励
+     * 由前端显式调用(点击签到，#11)，每日限1次
+     *
+     * @return 本次签到共获得铜钱数(当日已签到返回0)
      */
-    public void doDailyCheckin(Long userId) {
+    public int doDailyCheckin(Long userId) {
         LocalDate today = LocalDate.now();
         if (checkinDao.countByUserAndDate(userId, today) > 0) {
-            return;
+            return 0;
         }
         int streak = computeStreak(userId, today);
         int daily = configService.getInt("reward.daily_login", 10);
-        // 先写签到记录占位(当日唯一)，失败说明已签到
+        // 先写签到记录占位(当日唯一，uk_user_date 唯一键兜底)，插入冲突说明已签到
         BizCheckinRecord record = new BizCheckinRecord();
         record.setUserId(userId);
         record.setCheckinDate(today);
@@ -160,23 +165,51 @@ public class RewardService {
         record.setSys006("biz");
         try {
             checkinDao.insert(record);
-        } catch (Exception e) {
-            return;
+        } catch (DuplicateKeyException e) {
+            // 唯一键冲突=当日已签到(并发防重)
+            return 0;
         }
+        int totalCoins = 0;
         if (daily > 0) {
             addCoins(userId, daily, "reward", "每日登录奖励");
+            totalCoins += daily;
         }
         if (streak == 7) {
             int bonus = configService.getInt("reward.streak_7", 50);
             if (bonus > 0) {
                 addCoins(userId, bonus, "reward", "连续签到7天额外奖励");
+                totalCoins += bonus;
             }
         } else if (streak == 30) {
             int bonus = configService.getInt("reward.streak_30", 100);
             if (bonus > 0) {
                 addCoins(userId, bonus, "reward", "连续签到30天额外奖励");
+                totalCoins += bonus;
             }
         }
+        return totalCoins;
+    }
+
+    /**
+     * 查询签到状态(点击签到页展示，#11)
+     *
+     * @return {todayChecked: 当日是否已签到, streakDays: 连续签到天数(含今天，未签则不含)}
+     */
+    public Map<String, Object> getCheckinStatus(Long userId) {
+        LocalDate today = LocalDate.now();
+        boolean todayChecked = checkinDao.countByUserAndDate(userId, today) > 0;
+        int streakDays;
+        if (todayChecked) {
+            // 已签：连续天数含今天
+            streakDays = computeStreak(userId, today);
+        } else {
+            // 未签：连续天数止于昨天(computeStreak会+1，这里减掉)
+            streakDays = Math.max(0, computeStreak(userId, today) - 1);
+        }
+        Map<String, Object> status = new HashMap<>();
+        status.put("todayChecked", todayChecked);
+        status.put("streakDays", streakDays);
+        return status;
     }
 
     /** 连续签到天数(含今天)：从昨天往前数连续签到记录 */

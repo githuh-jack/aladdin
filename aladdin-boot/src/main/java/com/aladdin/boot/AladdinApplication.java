@@ -20,7 +20,7 @@ import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
         }
 )
 @EnableDiscoveryClient
-@MapperScan({"com.aladdin.system.dao", "com.aladdin.biz.dao"})
+@MapperScan({"com.aladdin.system.dao", "com.aladdin.system.pm.dao", "com.aladdin.biz.dao"})
 public class AladdinApplication {
 
     public static void main(String[] args) {

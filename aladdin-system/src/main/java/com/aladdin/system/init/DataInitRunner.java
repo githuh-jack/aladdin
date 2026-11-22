@@ -6,6 +6,7 @@ import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.core.annotation.Order;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -23,9 +24,11 @@ public class DataInitRunner implements ApplicationRunner {
     private static final Logger log = LoggerFactory.getLogger(DataInitRunner.class);
 
     private final JdbcTemplate jdbcTemplate;
+    private final PasswordEncoder passwordEncoder;
 
-    public DataInitRunner(JdbcTemplate jdbcTemplate) {
+    public DataInitRunner(JdbcTemplate jdbcTemplate, PasswordEncoder passwordEncoder) {
         this.jdbcTemplate = jdbcTemplate;
+        this.passwordEncoder = passwordEncoder;
     }
 
     @Override
@@ -41,6 +44,7 @@ public class DataInitRunner implements ApplicationRunner {
             initMenus();
             initApps();
             initPaperBoatMenus();
+            initPm();
             log.info("数据初始化完成");
         } catch (Exception e) {
             log.warn("数据初始化异常: {}", e.getMessage());
@@ -117,7 +121,9 @@ public class DataInitRunner implements ApplicationRunner {
                 new String[]{"/app/paper_boat/announcement", "biz/announcement/index", "公告配置", "lucide:megaphone", "12"},
                 new String[]{"/app/paper_boat/sysmail", "biz/sysmail/index", "系统邮件", "lucide:mail-plus", "13"},
                 new String[]{"/app/paper_boat/redeem", "biz/redeem/index", "兑换码", "lucide:ticket", "14"},
-                new String[]{"/app/paper_boat/feedback", "biz/feedback/index", "问题反馈", "lucide:message-square", "15"});
+                new String[]{"/app/paper_boat/feedback", "biz/feedback/index", "问题反馈", "lucide:message-square", "15"},
+                new String[]{"/app/paper_boat/report", "biz/report/index", "举报处理", "lucide:shield-alert", "16"},
+                new String[]{"/app/paper_boat/medal", "biz/medal/index", "勋章管理", "lucide:medal", "17"});
         for (String[] m : menus) {
             Integer count = jdbcTemplate.queryForObject(
                     "SELECT COUNT(*) FROM sys_resource WHERE path = ? AND parent_id = ?", Integer.class, m[0], rootId);
@@ -777,5 +783,419 @@ public class DataInitRunner implements ApplicationRunner {
                 "(4, '本部门及以下', '4', 4, 'info', 1, NOW(), 1, 1, 'system'), " +
                 "(4, '仅本人数据', '5', 5, 'danger', 1, NOW(), 1, 1, 'system')");
         log.info("初始化字典数据完成");
+    }
+
+    // ==================================================================================
+    // 项目管理系统(pm)：仿禅道简易项目管理系统，独立小系统归属系统管理应用
+    // pm_user 独立用户体系(id从200000起)，角色: admin/owner/product/manager/dev/tester
+    // ==================================================================================
+
+    /**
+     * 初始化项目管理系统：建表 -> 应用+菜单 -> 演示数据(仅首启pm_user为空时)
+     */
+    private void initPm() {
+        initPmTables();
+        initPmAppAndMenus();
+        initPmFlows();
+        initPmDemoData();
+    }
+
+    /**
+     * 初始化需求/缺陷默认流程定义(幂等，pm_flow_def为空时播种)
+     * story_flow: 开始 -> 产品评审 -> 研发实现 -> 测试验证 -> 结束
+     * bug_flow:   开始 -> 研发修复 -> 测试验证 -> 结束(缺陷无需经理确认，可直接指定修复人或由研发领取)
+     */
+    private void initPmFlows() {
+        Integer defCount = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM pm_flow_def", Integer.class);
+        if (defCount == null || defCount == 0) {
+            jdbcTemplate.update("INSERT INTO pm_flow_def (code, name, biz_type, description, status, sys001, sys003, sys005, sys006) " +
+                    "VALUES ('story_flow', '需求评审流程', 'story', '需求: 评审->开发->测试->完成', 1, NOW(), 1, 1, 'pm'), " +
+                    "('bug_flow', '缺陷处理流程', 'bug', '缺陷: 修复->验证->完成', 1, NOW(), 1, 1, 'pm')");
+            Long storyDefId = queryId("pm_flow_def", "code", "story_flow");
+            Long bugDefId = queryId("pm_flow_def", "code", "bug_flow");
+            // story流程节点
+            jdbcTemplate.update("INSERT INTO pm_flow_node (def_id, node_key, node_name, node_type, sort, handler_role, actions, approve_to, reject_to, biz_status, sys001, sys003, sys005, sys006) VALUES " +
+                    "(" + storyDefId + ", 'start', '开始', 'start', 1, '*', 'approve', 'review', NULL, NULL, NOW(), 1, 1, 'pm'), " +
+                    "(" + storyDefId + ", 'review', '产品评审', 'approval', 2, 'product', 'approve,reject,forward', 'develop', NULL, 'active', NOW(), 1, 1, 'pm'), " +
+                    "(" + storyDefId + ", 'develop', '研发实现', 'task', 3, 'dev', 'complete,forward', 'test', NULL, 'active', NOW(), 1, 1, 'pm'), " +
+                    "(" + storyDefId + ", 'test', '测试验证', 'approval', 4, 'tester', 'approve,reject,forward', 'end', 'develop', NULL, NOW(), 1, 1, 'pm'), " +
+                    "(" + storyDefId + ", 'end', '结束', 'end', 5, '*', 'approve', NULL, NULL, 'closed', NOW(), 1, 1, 'pm')");
+            // bug流程节点(无经理确认节点)
+            jdbcTemplate.update("INSERT INTO pm_flow_node (def_id, node_key, node_name, node_type, sort, handler_role, actions, approve_to, reject_to, biz_status, sys001, sys003, sys005, sys006) VALUES " +
+                    "(" + bugDefId + ", 'start', '开始', 'start', 1, '*', 'approve', 'fix', NULL, NULL, NOW(), 1, 1, 'pm'), " +
+                    "(" + bugDefId + ", 'fix', '研发修复', 'task', 2, 'dev', 'complete,forward', 'verify', NULL, 'active', NOW(), 1, 1, 'pm'), " +
+                    "(" + bugDefId + ", 'verify', '测试验证', 'approval', 3, 'tester', 'approve,reject,forward', 'end', 'fix', NULL, NOW(), 1, 1, 'pm'), " +
+                    "(" + bugDefId + ", 'end', '结束', 'end', 4, '*', 'approve', NULL, NULL, 'closed', NOW(), 1, 1, 'pm')");
+            log.info("初始化PM默认流程定义: 需求评审流程/缺陷处理流程");
+        }
+        migrateBugFlow();
+    }
+
+    /**
+     * 兼容升级：历史库的bug_flow含"经理确认"节点，按新流程改为 开始->研发修复->测试验证->结束
+     */
+    private void migrateBugFlow() {
+        try {
+            Long bugDefId = jdbcTemplate.queryForObject(
+                    "SELECT id FROM pm_flow_def WHERE code = 'bug_flow' ORDER BY id LIMIT 1", Long.class);
+            if (bugDefId == null) {
+                return;
+            }
+            Integer confirmCount = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM pm_flow_node WHERE def_id = ? AND node_key = 'confirm'", Integer.class, bugDefId);
+            if (confirmCount == null || confirmCount == 0) {
+                return;
+            }
+            jdbcTemplate.update("UPDATE pm_flow_node SET approve_to = 'fix' WHERE def_id = ? AND node_key = 'start'", bugDefId);
+            // 迁移停在确认节点的运行中实例到修复节点，并记录日志
+            List<Long> runningIds = jdbcTemplate.queryForList(
+                    "SELECT id FROM pm_flow_instance WHERE def_id = ? AND status = 'running' AND current_node = 'confirm'",
+                    Long.class, bugDefId);
+            jdbcTemplate.update("UPDATE pm_flow_instance SET current_node = 'fix' " +
+                    "WHERE def_id = ? AND status = 'running' AND current_node = 'confirm'", bugDefId);
+            for (Long instId : runningIds) {
+                jdbcTemplate.update("INSERT INTO pm_flow_log (instance_id, from_node, action, to_node, remark, sys001, sys003, sys005, sys006) " +
+                        "VALUES (?, 'confirm', 'auto', 'fix', '流程升级：取消经理确认节点，自动流转至研发修复', NOW(), 1, 1, 'pm')", instId);
+            }
+            jdbcTemplate.update("DELETE FROM pm_flow_node WHERE def_id = ? AND node_key = 'confirm'", bugDefId);
+            jdbcTemplate.update("UPDATE pm_flow_node SET sort = sort - 1 WHERE def_id = ? AND sort > 2", bugDefId);
+            jdbcTemplate.update("UPDATE pm_flow_def SET description = '缺陷: 修复->验证->完成' WHERE id = ?", bugDefId);
+            log.info("bug_flow已升级: 移除经理确认节点，迁移{}个运行中实例", runningIds.size());
+        } catch (Exception e) {
+            log.warn("bug_flow迁移失败: {}", e.getMessage());
+        }
+    }
+
+    private void initPmTables() {
+        for (String ddl : buildPmInitSql().split(";\n")) {
+            String trimmed = ddl.trim();
+            if (!trimmed.isEmpty()) {
+                try {
+                    jdbcTemplate.execute(trimmed);
+                } catch (Exception e) {
+                    log.warn("创建pm表失败: {}", e.getMessage());
+                }
+            }
+        }
+        migratePmColumns();
+    }
+
+    /**
+     * 兼容升级：为已有库补齐新增列(CREATE TABLE IF NOT EXISTS不会更新已存在的表)
+     */
+    private void migratePmColumns() {
+        List<String> alters = List.of(
+                "ALTER TABLE pm_bug ADD COLUMN resolve_remark varchar(500) DEFAULT '' COMMENT '解决说明'",
+                "ALTER TABLE pm_bug ADD COLUMN remark varchar(500) DEFAULT '' COMMENT '转发/领取说明'",
+                "ALTER TABLE pm_task ADD COLUMN finished_time datetime DEFAULT NULL COMMENT '完成时间'",
+                "ALTER TABLE pm_project ADD COLUMN phase varchar(20) DEFAULT 'research' COMMENT '项目阶段'");
+        for (String sql : alters) {
+            try {
+                jdbcTemplate.execute(sql);
+                log.info("pm列升级: {}", sql);
+            } catch (Exception ignored) {
+                // 列已存在
+            }
+        }
+    }
+
+    private void initPmAppAndMenus() {
+        // 菜单根节点：项目管理
+        Integer rootCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM sys_resource WHERE parent_id = 0 AND path = '/app/pm'", Integer.class);
+        if (rootCount == null || rootCount == 0) {
+            jdbcTemplate.update("INSERT INTO sys_resource (resource_name, parent_id, sort, path, component, resource_type, perms, icon, status, sys001, sys003, sys005, sys006) " +
+                    "VALUES ('项目管理', 0, 8, '/app/pm', NULL, 'M', '', 'lucide:kanban-square', 1, NOW(), 1, 1, 'system')");
+            log.info("初始化应用菜单根节点: 项目管理(/app/pm)");
+        }
+        Long rootId = jdbcTemplate.queryForObject(
+                "SELECT id FROM sys_resource WHERE parent_id = 0 AND path = '/app/pm' ORDER BY id LIMIT 1", Long.class);
+        // 子菜单(幂等按path+parent判重)
+        List<String[]> menus = List.of(
+                new String[]{"/app/pm/dept", "app/pm/dept/index", "部门管理", "lucide:building-2", "1"},
+                new String[]{"/app/pm/user", "app/pm/user/index", "用户管理", "lucide:users", "2"},
+                new String[]{"/app/pm/program", "app/pm/program/index", "项目集管理", "lucide:layers", "3"},
+                new String[]{"/app/pm/product", "app/pm/product/index", "产品管理", "lucide:package", "4"},
+                new String[]{"/app/pm/module", "app/pm/module/index", "模块维护", "lucide:list-tree", "5"},
+                new String[]{"/app/pm/plan", "app/pm/plan/index", "计划维护", "lucide:calendar-days", "6"},
+                new String[]{"/app/pm/story", "app/pm/story/index", "需求管理", "lucide:lightbulb", "7"},
+                new String[]{"/app/pm/release", "app/pm/release/index", "发布管理", "lucide:rocket", "8"},
+                new String[]{"/app/pm/project", "app/pm/project/index", "项目管理", "lucide:kanban-square", "9"},
+                new String[]{"/app/pm/task", "app/pm/task/index", "任务管理", "lucide:square-check-big", "10"},
+                new String[]{"/app/pm/bug", "app/pm/bug/index", "缺陷管理", "lucide:bug", "11"},
+                new String[]{"/app/pm/case", "app/pm/case/index", "用例管理", "lucide:flask-conical", "12"},
+                new String[]{"/app/pm/commit", "app/pm/commit/index", "代码提交", "lucide:git-commit-horizontal", "13"},
+                new String[]{"/app/pm/flow", "app/pm/flow/index", "流程配置", "lucide:git-merge", "14"},
+                new String[]{"/app/pm/flowtodo", "app/pm/flowtodo/index", "流程待办", "lucide:list-filter", "15"},
+                new String[]{"/app/pm/workbench", "app/pm/workbench/index", "工作台", "lucide:layout-dashboard", "16"},
+                new String[]{"/app/pm/stat", "app/pm/stat/index", "工时统计", "lucide:chart-column", "17"},
+                new String[]{"/app/pm/worklog", "app/pm/worklog/index", "工时日历", "lucide:calendar-clock", "18"},
+                new String[]{"/app/pm/file", "app/pm/file/index", "项目文件", "lucide:folder-open", "19"});
+        for (String[] m : menus) {
+            Integer count = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM sys_resource WHERE path = ? AND parent_id = ?", Integer.class, m[0], rootId);
+            if (count == null || count == 0) {
+                jdbcTemplate.update("INSERT INTO sys_resource (resource_name, parent_id, sort, path, component, resource_type, perms, icon, status, sys001, sys003, sys005, sys006) " +
+                                "VALUES (?, ?, ?, ?, ?, 'M', 'pm:list', ?, 1, NOW(), 1, 1, 'system')",
+                        m[2], rootId, Integer.parseInt(m[4]), m[0], m[1], m[3]);
+                Long menuId = jdbcTemplate.queryForObject(
+                        "SELECT id FROM sys_resource WHERE path = ? AND parent_id = ? ORDER BY id DESC LIMIT 1", Long.class, m[0], rootId);
+                jdbcTemplate.update("INSERT IGNORE INTO sys_role_resource (role_id, resource_id) VALUES (1, ?)", menuId);
+                log.info("初始化项目管理子菜单: {}", m[2]);
+            }
+        }
+        // 授权根节点给admin角色
+        if (rootId != null) {
+            jdbcTemplate.update("INSERT INTO sys_role_resource (role_id, resource_id) " +
+                    "SELECT 1, ? FROM DUAL WHERE NOT EXISTS " +
+                    "(SELECT 1 FROM sys_role_resource WHERE role_id = 1 AND resource_id = ?)", rootId, rootId);
+        }
+        // 应用注册
+        Integer appCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM sys_app WHERE app_code = 'pm'", Integer.class);
+        if (appCount == null || appCount == 0) {
+            jdbcTemplate.update("INSERT INTO sys_app (app_name, app_code, description, allow_register, menu_id, init_sql, tables_initialized, status, sys001, sys003, sys005, sys006) " +
+                            "VALUES ('项目管理系统', 'pm', '仿禅道简易项目管理系统(独立用户体系)', 0, ?, ?, 1, 1, NOW(), 1, 1, 'system')",
+                    rootId, buildPmInitSql());
+            log.info("初始化应用: 项目管理系统(pm)");
+        }
+    }
+
+    /**
+     * 演示数据：仅当pm_user为空时播种(首启初始化)
+     * 账号密码统一 123456：admin/owner01/pm01/mgr01/dev01/dev02/qa01
+     */
+    private void initPmDemoData() {
+        Integer userCount = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM pm_user", Integer.class);
+        if (userCount == null || userCount > 0) {
+            return;
+        }
+        String now = "NOW()";
+        // 部门
+        jdbcTemplate.update("INSERT INTO pm_dept (parent_id, dept_name, sort, leader, status, sys001, sys003, sys005, sys006) VALUES " +
+                "(0, '研发部', 1, '李经理', 1, " + now + ", 1, 1, 'pm'), " +
+                "(0, '产品部', 2, '王产品', 1, " + now + ", 1, 1, 'pm'), " +
+                "(0, '测试部', 3, '孙测试', 1, " + now + ", 1, 1, 'pm')");
+        Long devDept = queryId("pm_dept", "dept_name", "研发部");
+        Long prodDept = queryId("pm_dept", "dept_name", "产品部");
+        Long testDept = queryId("pm_dept", "dept_name", "测试部");
+        // 用户(BCrypt加密)
+        String pwd = passwordEncoder.encode("123456");
+        Object[][] users = {
+                {"admin", "系统管理员", "admin", prodDept},
+                {"owner01", "张总", "owner", prodDept},
+                {"pm01", "王产品", "product", prodDept},
+                {"mgr01", "李经理", "manager", devDept},
+                {"dev01", "赵开发", "dev", devDept},
+                {"dev02", "钱开发", "dev", devDept},
+                {"qa01", "孙测试", "tester", testDept}};
+        for (Object[] u : users) {
+            jdbcTemplate.update("INSERT INTO pm_user (username, password, real_name, dept_id, role, email, phone, status, sys001, sys003, sys005, sys006) " +
+                            "VALUES (?, ?, ?, ?, ?, '', '', 1, " + now + ", 1, 1, 'pm')", u[0], pwd, u[1], u[3], u[2]);
+        }
+        Long adminId = queryId("pm_user", "username", "admin");
+        Long ownerId = queryId("pm_user", "username", "owner01");
+        Long pmId = queryId("pm_user", "username", "pm01");
+        Long mgrId = queryId("pm_user", "username", "mgr01");
+        Long dev1Id = queryId("pm_user", "username", "dev01");
+        Long dev2Id = queryId("pm_user", "username", "dev02");
+        Long qaId = queryId("pm_user", "username", "qa01");
+        // 项目集
+        jdbcTemplate.update("INSERT INTO pm_program (name, description, budget, plan_desc, owner_id, status, sys001, sys003, sys005, sys006) " +
+                        "VALUES ('智慧园区项目集', '园区智能化整体解决方案', 5000000, 'Q1完成门禁产品线，Q2上线访客系统', ?, 1, " + now + ", 1, 1, 'pm')", ownerId);
+        Long programId = queryId("pm_program", "name", "智慧园区项目集");
+        jdbcTemplate.update("INSERT INTO pm_stakeholder (program_id, name, stakeholder_role, contact, remark, sys001, sys003, sys005, sys006) " +
+                "VALUES (" + programId + ", '业主委员会', '甲方代表', '13800000001', '验收决策方', " + now + ", 1, 1, 'pm'), " +
+                "(" + programId + ", '园区物业', '使用方', '13800000002', '', " + now + ", 1, 1, 'pm')");
+        // 产品
+        jdbcTemplate.update("INSERT INTO pm_product (name, program_id, owner_id, description, status, sys001, sys003, sys005, sys006) " +
+                "VALUES ('门禁系统', " + programId + ", " + pmId + ", '园区门禁一体化产品', 1, " + now + ", 1, 1, 'pm'), " +
+                "('访客系统', " + programId + ", " + pmId + ", '访客预约与通行产品', 1, " + now + ", 1, 1, 'pm')");
+        Long productId = queryId("pm_product", "name", "门禁系统");
+        Long productId2 = queryId("pm_product", "name", "访客系统");
+        // 模块
+        jdbcTemplate.update("INSERT INTO pm_module (product_id, name, parent_id, sort, sys001, sys003, sys005, sys006) " +
+                "VALUES (" + productId + ", '硬件模块', 0, 1, " + now + ", 1, 1, 'pm'), " +
+                "(" + productId + ", '软件模块', 0, 2, " + now + ", 1, 1, 'pm'), " +
+                "(" + productId + ", '开门算法', 0, 3, " + now + ", 1, 1, 'pm')");
+        Long moduleId = queryId("pm_module", "name", "软件模块");
+        // 计划
+        jdbcTemplate.update("INSERT INTO pm_plan (product_id, title, description, status, sys001, sys003, sys005, sys006) " +
+                "VALUES (" + productId + ", 'V1.0 迭代计划', '首版交付：基础门禁功能', 2, " + now + ", 1, 1, 'pm')");
+        Long planId = queryId("pm_plan", "title", "V1.0 迭代计划");
+        // 需求
+        jdbcTemplate.update("INSERT INTO pm_story (product_id, module_id, plan_id, title, description, priority, status, sys001, sys003, sys005, sys006) " +
+                "VALUES (" + productId + ", " + moduleId + ", " + planId + ", '刷卡开门', '支持IC卡刷卡开门，响应时间<1s', 4, 'active', " + now + ", 1, 1, 'pm'), " +
+                "(" + productId + ", " + moduleId + ", " + planId + ", '密码开门', '支持数字密码开门', 3, 'active', " + now + ", 1, 1, 'pm'), " +
+                "(" + productId + ", " + moduleId + ", " + planId + ", '人脸识别开门', '支持人脸识别开门', 2, 'draft', " + now + ", 1, 1, 'pm'), " +
+                "(" + productId2 + ", NULL, NULL, '访客预约码', '访客线上预约生成通行码', 3, 'active', " + now + ", 1, 1, 'pm')");
+        // 发布
+        jdbcTemplate.update("INSERT INTO pm_release (product_id, name, description, status, sys001, sys003, sys005, sys006) " +
+                "VALUES (" + productId + ", 'V1.0.0', '首个正式版本', 0, " + now + ", 1, 1, 'pm')");
+        // 项目
+        jdbcTemplate.update("INSERT INTO pm_project (name, program_id, manager_id, description, budget, phase, status, sys001, sys003, sys005, sys006) " +
+                "VALUES ('门禁一期', " + programId + ", " + mgrId + ", '门禁系统一期交付', 800000, 'develop', 1, " + now + ", 1, 1, 'pm')");
+        Long projectId = queryId("pm_project", "name", "门禁一期");
+        jdbcTemplate.update("INSERT INTO pm_project_product (project_id, product_id) VALUES (" + projectId + ", " + productId + ")");
+        jdbcTemplate.update("INSERT INTO pm_project_story (project_id, story_id) " +
+                "SELECT " + projectId + ", id FROM pm_story WHERE status = 'active'");
+        // 团队
+        jdbcTemplate.update("INSERT INTO pm_team (project_id, user_id, role, sys001, sys003, sys005, sys006) " +
+                "VALUES (" + projectId + ", " + mgrId + ", '经理', " + now + ", 1, 1, 'pm'), " +
+                "(" + projectId + ", " + dev1Id + ", '研发', " + now + ", 1, 1, 'pm'), " +
+                "(" + projectId + ", " + dev2Id + ", '研发', " + now + ", 1, 1, 'pm'), " +
+                "(" + projectId + ", " + qaId + ", '测试', " + now + ", 1, 1, 'pm')");
+        // 任务
+        jdbcTemplate.update("INSERT INTO pm_task (project_id, story_id, name, type, assigned_to, status, estimate_hours, description, opened_by, sys001, sys003, sys005, sys006) " +
+                "VALUES (" + projectId + ", " + queryId("pm_story", "title", "刷卡开门") + ", '刷卡开门接口开发', 'devel', " + dev1Id + ", 'doing', 16, '实现刷卡开门REST接口', " + mgrId + ", " + now + ", 1, 1, 'pm'), " +
+                "(" + projectId + ", " + queryId("pm_story", "title", "密码开门") + ", '密码开门前端页面', 'devel', " + dev2Id + ", 'wait', 12, '', " + mgrId + ", " + now + ", 1, 1, 'pm'), " +
+                "(" + projectId + ", " + queryId("pm_story", "title", "刷卡开门") + ", '刷卡开门测试', 'test', " + qaId + ", 'wait', 8, '', " + mgrId + ", " + now + ", 1, 1, 'pm')");
+        Long task1Id = queryId("pm_task", "name", "刷卡开门接口开发");
+        // Bug
+        jdbcTemplate.update("INSERT INTO pm_bug (product_id, project_id, title, steps, severity, status, opened_by, assigned_to, sys001, sys003, sys005, sys006) " +
+                "VALUES (" + productId + ", " + projectId + ", '刷卡开门偶发无响应', '1.连续刷卡10次 2.观察开门日志', 2, 'active', " + qaId + ", " + dev1Id + ", " + now + ", 1, 1, 'pm'), " +
+                "(" + productId + ", " + projectId + ", '密码输入框未校验长度', '输入20位密码提交', 4, 'resolved', " + qaId + ", " + dev2Id + ", " + now + ", 1, 1, 'pm')");
+        // 用例
+        jdbcTemplate.update("INSERT INTO pm_case (product_id, module_id, title, priority, steps, expected, last_result, executed_by, executed_time, sys001, sys003, sys005, sys006) " +
+                "VALUES (" + productId + ", " + moduleId + ", '正常刷卡开门', 3, '1.有效IC卡靠近读卡器', '1秒内开门', 'pass', " + qaId + ", " + now + ", " + now + ", 1, 1, 'pm'), " +
+                "(" + productId + ", " + moduleId + ", '无效卡刷卡', 3, '1.无效IC卡靠近读卡器', '不开门并提示', 'fail', " + qaId + ", " + now + ", " + now + ", 1, 1, 'pm')");
+        // 代码提交
+        jdbcTemplate.update("INSERT INTO pm_commit (task_id, user_id, code_url, remark, commit_time, sys001, sys003, sys005, sys006) " +
+                "VALUES (" + task1Id + ", " + dev1Id + ", 'http://git.example.com/pms/door/commit/a1b2c3', '刷卡开门接口初版', " + now + ", " + now + ", 1, 1, 'pm')");
+        // 工时记录(演示)
+        jdbcTemplate.update("INSERT INTO pm_worklog (project_id, task_id, user_id, work_date, hours, content, sys001, sys003, sys005, sys006) " +
+                "VALUES (" + projectId + ", " + task1Id + ", " + dev1Id + ", CURDATE(), 6.5, '刷卡开门接口开发与自测', " + now + ", 1, 1, 'pm'), " +
+                "(" + projectId + ", " + task1Id + ", " + dev1Id + ", DATE_SUB(CURDATE(), INTERVAL 1 DAY), 8, '接口联调', " + now + ", 1, 1, 'pm'), " +
+                "(" + projectId + ", NULL, " + dev2Id + ", CURDATE(), 5, '密码开门前端页面开发', " + now + ", 1, 1, 'pm')");
+        // 项目文件(演示)
+        jdbcTemplate.update("INSERT INTO pm_file (project_id, file_name, file_url, file_category, remark, uploader_id, sys001, sys003, sys005, sys006) " +
+                "VALUES (" + projectId + ", '门禁一期需求说明书.docx', 'http://files.example.com/pm/door-requirement.docx', 'requirement', '一期需求基线', " + pmId + ", " + now + ", 1, 1, 'pm'), " +
+                "(" + projectId + ", '接口设计说明.pdf', 'http://files.example.com/pm/door-api-design.pdf', 'design', '', " + dev1Id + ", " + now + ", 1, 1, 'pm')");
+        log.info("初始化项目管理系统演示数据完成(admin/owner01/pm01/mgr01/dev01/dev02/qa01, 密码123456)");
+    }
+
+    private Long queryId(String table, String column, String value) {
+        return jdbcTemplate.queryForObject(
+                "SELECT id FROM " + table + " WHERE " + column + " = ? ORDER BY id DESC LIMIT 1", Long.class, value);
+    }
+
+    /**
+     * 项目管理系统相关表初始化DDL(pm_user主键从200000起与sys_user/biz_user隔离)
+     */
+    private String buildPmInitSql() {
+        String audit = "  `sys001` datetime DEFAULT NULL,\n" +
+                "  `sys002` datetime DEFAULT NULL,\n" +
+                "  `sys003` bigint DEFAULT NULL,\n" +
+                "  `sys004` bigint DEFAULT NULL,\n" +
+                "  `sys005` int DEFAULT 1,\n" +
+                "  `sys006` varchar(64) DEFAULT '',\n" +
+                "  `sys007` varchar(64) DEFAULT '',\n";
+        String tail = "  PRIMARY KEY (`id`)\n)";
+        List<String> ddls = List.of(
+                "CREATE TABLE IF NOT EXISTS `pm_dept` (\n  `id` bigint NOT NULL AUTO_INCREMENT,\n" +
+                        "  `parent_id` bigint DEFAULT 0,\n  `dept_name` varchar(50) DEFAULT '',\n  `sort` int DEFAULT 0,\n" +
+                        "  `leader` varchar(50) DEFAULT '',\n  `status` int DEFAULT 1,\n" + audit + tail + " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM部门'",
+                "CREATE TABLE IF NOT EXISTS `pm_user` (\n  `id` bigint NOT NULL AUTO_INCREMENT,\n" +
+                        "  `username` varchar(50) NOT NULL,\n  `password` varchar(100) NOT NULL,\n  `real_name` varchar(50) DEFAULT '',\n" +
+                        "  `dept_id` bigint DEFAULT NULL,\n  `role` varchar(20) DEFAULT 'dev' COMMENT 'admin/owner/product/manager/dev/tester',\n" +
+                        "  `email` varchar(50) DEFAULT '',\n  `phone` varchar(20) DEFAULT '',\n  `status` int DEFAULT 1,\n" + audit +
+                        "  PRIMARY KEY (`id`),\n  UNIQUE KEY `uk_username` (`username`)\n" +
+                        ") ENGINE=InnoDB AUTO_INCREMENT=200000 DEFAULT CHARSET=utf8mb4 COMMENT='PM用户(独立于sys_user)'",
+                "CREATE TABLE IF NOT EXISTS `pm_program` (\n  `id` bigint NOT NULL AUTO_INCREMENT,\n" +
+                        "  `name` varchar(100) NOT NULL,\n  `description` varchar(500) DEFAULT '',\n  `budget` decimal(14,2) DEFAULT 0,\n" +
+                        "  `plan_desc` text,\n  `owner_id` bigint DEFAULT NULL,\n  `start_date` date DEFAULT NULL,\n  `end_date` date DEFAULT NULL,\n" +
+                        "  `status` int DEFAULT 1 COMMENT '1进行中 0已关闭',\n" + audit + tail + " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM项目集'",
+                "CREATE TABLE IF NOT EXISTS `pm_stakeholder` (\n  `id` bigint NOT NULL AUTO_INCREMENT,\n" +
+                        "  `program_id` bigint NOT NULL,\n  `name` varchar(50) DEFAULT '',\n  `stakeholder_role` varchar(50) DEFAULT '',\n" +
+                        "  `contact` varchar(50) DEFAULT '',\n  `remark` varchar(200) DEFAULT '',\n" + audit + tail + " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM项目集干系人'",
+                "CREATE TABLE IF NOT EXISTS `pm_product` (\n  `id` bigint NOT NULL AUTO_INCREMENT,\n" +
+                        "  `name` varchar(100) NOT NULL,\n  `program_id` bigint DEFAULT NULL,\n  `owner_id` bigint DEFAULT NULL,\n" +
+                        "  `description` varchar(500) DEFAULT '',\n  `status` int DEFAULT 1,\n" + audit + tail + " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM产品'",
+                "CREATE TABLE IF NOT EXISTS `pm_module` (\n  `id` bigint NOT NULL AUTO_INCREMENT,\n" +
+                        "  `product_id` bigint NOT NULL,\n  `name` varchar(100) DEFAULT '',\n  `parent_id` bigint DEFAULT 0,\n" +
+                        "  `sort` int DEFAULT 0,\n" + audit + tail + " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM产品模块'",
+                "CREATE TABLE IF NOT EXISTS `pm_plan` (\n  `id` bigint NOT NULL AUTO_INCREMENT,\n" +
+                        "  `product_id` bigint NOT NULL,\n  `title` varchar(100) DEFAULT '',\n  `description` varchar(500) DEFAULT '',\n" +
+                        "  `start_date` date DEFAULT NULL,\n  `end_date` date DEFAULT NULL,\n  `status` int DEFAULT 1 COMMENT '1未开始 2进行中 3已完成',\n" +
+                        audit + tail + " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM产品计划'",
+                "CREATE TABLE IF NOT EXISTS `pm_story` (\n  `id` bigint NOT NULL AUTO_INCREMENT,\n" +
+                        "  `product_id` bigint NOT NULL,\n  `module_id` bigint DEFAULT NULL,\n  `plan_id` bigint DEFAULT NULL,\n" +
+                        "  `title` varchar(200) NOT NULL,\n  `description` text,\n  `priority` int DEFAULT 3 COMMENT '1低2中3高4最高',\n" +
+                        "  `status` varchar(20) DEFAULT 'draft' COMMENT 'draft/active/closed',\n  `closed_reason` varchar(200) DEFAULT '',\n" +
+                        audit + tail + " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM需求'",
+                "CREATE TABLE IF NOT EXISTS `pm_release` (\n  `id` bigint NOT NULL AUTO_INCREMENT,\n" +
+                        "  `product_id` bigint NOT NULL,\n  `name` varchar(100) DEFAULT '',\n  `description` varchar(500) DEFAULT '',\n" +
+                        "  `status` int DEFAULT 0 COMMENT '0未发布 1已发布',\n" + audit + tail + " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM产品发布'",
+                "CREATE TABLE IF NOT EXISTS `pm_project` (\n  `id` bigint NOT NULL AUTO_INCREMENT,\n" +
+                        "  `name` varchar(100) NOT NULL,\n  `program_id` bigint DEFAULT NULL,\n  `manager_id` bigint DEFAULT NULL,\n" +
+                        "  `description` varchar(500) DEFAULT '',\n  `budget` decimal(14,2) DEFAULT 0,\n" +
+                        "  `start_date` date DEFAULT NULL,\n  `end_date` date DEFAULT NULL,\n  `status` int DEFAULT 1 COMMENT '1进行中 0已结束',\n" +
+                        "  `phase` varchar(20) DEFAULT 'research' COMMENT 'research调研/requirement需求整理/develop研发/online上线/ops运维/archive归档',\n" +
+                        audit + tail + " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM项目'",
+                "CREATE TABLE IF NOT EXISTS `pm_project_product` (\n  `id` bigint NOT NULL AUTO_INCREMENT,\n" +
+                        "  `project_id` bigint NOT NULL,\n  `product_id` bigint NOT NULL,\n" + audit +
+                        "  PRIMARY KEY (`id`),\n  KEY `idx_project_id` (`project_id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM项目关联产品'",
+                "CREATE TABLE IF NOT EXISTS `pm_project_story` (\n  `id` bigint NOT NULL AUTO_INCREMENT,\n" +
+                        "  `project_id` bigint NOT NULL,\n  `story_id` bigint NOT NULL,\n" + audit +
+                        "  PRIMARY KEY (`id`),\n  KEY `idx_project_id` (`project_id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM项目关联需求'",
+                "CREATE TABLE IF NOT EXISTS `pm_team` (\n  `id` bigint NOT NULL AUTO_INCREMENT,\n" +
+                        "  `project_id` bigint NOT NULL,\n  `user_id` bigint NOT NULL,\n  `role` varchar(20) DEFAULT '研发',\n" +
+                        audit + tail + " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM项目团队'",
+                "CREATE TABLE IF NOT EXISTS `pm_task` (\n  `id` bigint NOT NULL AUTO_INCREMENT,\n" +
+                        "  `project_id` bigint NOT NULL,\n  `story_id` bigint DEFAULT NULL,\n  `name` varchar(200) NOT NULL,\n" +
+                        "  `type` varchar(20) DEFAULT 'devel' COMMENT 'devel/test/design/docs',\n  `assigned_to` bigint DEFAULT NULL,\n" +
+                        "  `status` varchar(20) DEFAULT 'wait' COMMENT 'wait/doing/done/closed',\n  `estimate_hours` decimal(6,1) DEFAULT 0,\n" +
+                        "  `description` varchar(1000) DEFAULT '',\n  `opened_by` bigint DEFAULT NULL,\n" +
+                        "  `finished_time` datetime DEFAULT NULL COMMENT '完成时间',\n" + audit + tail + " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM任务'",
+                "CREATE TABLE IF NOT EXISTS `pm_bug` (\n  `id` bigint NOT NULL AUTO_INCREMENT,\n" +
+                        "  `product_id` bigint DEFAULT NULL,\n  `project_id` bigint DEFAULT NULL,\n  `title` varchar(200) NOT NULL,\n" +
+                        "  `steps` text,\n  `severity` int DEFAULT 3 COMMENT '1致命2严重3一般4轻微',\n" +
+                        "  `status` varchar(20) DEFAULT 'active' COMMENT 'active/resolved/closed',\n  `opened_by` bigint DEFAULT NULL,\n" +
+                        "  `assigned_to` bigint DEFAULT NULL,\n  `resolved_by` bigint DEFAULT NULL,\n  `resolution` varchar(20) DEFAULT NULL,\n" +
+                        "  `resolve_remark` varchar(500) DEFAULT '' COMMENT '解决说明',\n  `remark` varchar(500) DEFAULT '' COMMENT '转发/领取说明',\n" +
+                        audit + tail + " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM缺陷'",
+                "CREATE TABLE IF NOT EXISTS `pm_case` (\n  `id` bigint NOT NULL AUTO_INCREMENT,\n" +
+                        "  `product_id` bigint NOT NULL,\n  `module_id` bigint DEFAULT NULL,\n  `title` varchar(200) NOT NULL,\n" +
+                        "  `priority` int DEFAULT 3,\n  `steps` text,\n  `expected` text,\n" +
+                        "  `last_result` varchar(20) DEFAULT 'none' COMMENT 'none/pass/fail/blocked',\n" +
+                        "  `executed_by` bigint DEFAULT NULL,\n  `executed_time` datetime DEFAULT NULL,\n" + audit + tail + " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM测试用例'",
+                "CREATE TABLE IF NOT EXISTS `pm_commit` (\n  `id` bigint NOT NULL AUTO_INCREMENT,\n" +
+                        "  `task_id` bigint DEFAULT NULL,\n  `user_id` bigint DEFAULT NULL,\n  `code_url` varchar(500) DEFAULT '',\n" +
+                        "  `remark` varchar(500) DEFAULT '',\n  `commit_time` datetime DEFAULT NULL,\n" + audit + tail + " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM代码提交'",
+                "CREATE TABLE IF NOT EXISTS `pm_flow_def` (\n  `id` bigint NOT NULL AUTO_INCREMENT,\n" +
+                        "  `code` varchar(50) NOT NULL COMMENT '流程编码',\n  `name` varchar(100) DEFAULT '',\n" +
+                        "  `biz_type` varchar(20) DEFAULT 'story' COMMENT 'story/bug',\n  `description` varchar(500) DEFAULT '',\n" +
+                        "  `status` int DEFAULT 1 COMMENT '1启用 0停用',\n" + audit + tail + " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM流程定义'",
+                "CREATE TABLE IF NOT EXISTS `pm_flow_node` (\n  `id` bigint NOT NULL AUTO_INCREMENT,\n" +
+                        "  `def_id` bigint NOT NULL COMMENT '流程定义ID',\n  `node_key` varchar(50) NOT NULL COMMENT '节点标识',\n" +
+                        "  `node_name` varchar(50) DEFAULT '',\n  `node_type` varchar(20) DEFAULT 'approval' COMMENT 'start/approval/task/end',\n" +
+                        "  `sort` int DEFAULT 0,\n  `handler_role` varchar(20) DEFAULT '*' COMMENT 'admin/owner/product/manager/dev/tester/*',\n" +
+                        "  `actions` varchar(100) DEFAULT 'approve,reject' COMMENT 'approve/reject/forward/complete',\n" +
+                        "  `approve_to` varchar(50) DEFAULT NULL COMMENT '同意后节点key',\n  `reject_to` varchar(50) DEFAULT NULL COMMENT '拒绝后节点key(空=终止)',\n" +
+                        "  `biz_status` varchar(20) DEFAULT NULL COMMENT '进入节点回写业务状态',\n" +
+                        audit + tail + " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM流程节点'",
+                "CREATE TABLE IF NOT EXISTS `pm_flow_instance` (\n  `id` bigint NOT NULL AUTO_INCREMENT,\n" +
+                        "  `def_id` bigint NOT NULL COMMENT '流程定义ID',\n  `biz_type` varchar(20) DEFAULT 'story',\n" +
+                        "  `biz_id` bigint NOT NULL COMMENT '业务ID',\n  `current_node` varchar(50) DEFAULT '',\n" +
+                        "  `current_assignee` bigint DEFAULT NULL COMMENT '当前处理人(空=按角色)',\n" +
+                        "  `status` varchar(20) DEFAULT 'running' COMMENT 'running/finished/terminated',\n" +
+                        "  `created_by` bigint DEFAULT NULL,\n" + audit +
+                        "  PRIMARY KEY (`id`),\n  KEY `idx_biz` (`biz_type`, `biz_id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM流程实例'",
+                "CREATE TABLE IF NOT EXISTS `pm_flow_log` (\n  `id` bigint NOT NULL AUTO_INCREMENT,\n" +
+                        "  `instance_id` bigint NOT NULL COMMENT '流程实例ID',\n  `from_node` varchar(50) DEFAULT '',\n" +
+                        "  `action` varchar(20) DEFAULT '' COMMENT 'start/approve/reject/forward/complete',\n" +
+                        "  `operator_id` bigint DEFAULT NULL,\n  `to_node` varchar(50) DEFAULT NULL,\n  `remark` varchar(200) DEFAULT '',\n" +
+                        audit + tail + " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM流程操作日志'",
+                "CREATE TABLE IF NOT EXISTS `pm_worklog` (\n  `id` bigint NOT NULL AUTO_INCREMENT,\n" +
+                        "  `project_id` bigint NOT NULL,\n  `task_id` bigint DEFAULT NULL,\n  `story_id` bigint DEFAULT NULL,\n" +
+                        "  `user_id` bigint NOT NULL,\n  `work_date` date DEFAULT NULL,\n" +
+                        "  `hours` decimal(5,1) DEFAULT 0 COMMENT '工时(小时)',\n  `content` varchar(500) DEFAULT '',\n" +
+                        audit + tail + " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM工时记录'",
+                "CREATE TABLE IF NOT EXISTS `pm_file` (\n  `id` bigint NOT NULL AUTO_INCREMENT,\n" +
+                        "  `project_id` bigint NOT NULL,\n  `file_name` varchar(200) DEFAULT '',\n  `file_url` varchar(500) DEFAULT '',\n" +
+                        "  `file_category` varchar(20) DEFAULT 'other' COMMENT 'survey/requirement/design/develop/test/release/ops/other',\n" +
+                        "  `remark` varchar(200) DEFAULT '',\n  `uploader_id` bigint DEFAULT NULL,\n" +
+                        audit + tail + " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM项目文件'");
+        return String.join(";\n", ddls) + ";";
     }
 }

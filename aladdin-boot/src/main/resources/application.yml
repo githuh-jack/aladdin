@@ -65,15 +65,14 @@ aladdin:
       - /biz/auth/send-code
       - /biz/auth/reset-password
       - /biz/auth/login
+      - /pm/auth/login
       - /sso/**
       - /verifyCode/**
       - /biz/public/**
-      - /biz/note/public
       - /biz/diary/public
       - /biz/letter/public/**
       - /biz/avatar/**
       - /biz/invite/check
-      - /biz/comment/list
       - /css/**
       - /js/**
       - /img/**

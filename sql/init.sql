@@ -1181,3 +1181,434 @@ INSERT IGNORE INTO `biz_medal` (`id`, `name`, `icon`, `description`, `status`, `
 (1, '正义信使', '', '举报违规信件有功，颁发给正义的举报人', 1, NOW(), 1, 1, 'system'),
 (2, '邮政之光', '', '维护纸船信箱纯净的荣誉勋章', 1, NOW(), 1, 1, 'system'),
 (3, '守信之星', '', '诚实守信、信用良好的用户勋章', 1, NOW(), 1, 1, 'system');
+
+-- ====================================================================
+-- 项目管理系统(pm)：仿禅道简易项目管理系统，独立小系统归属系统管理应用
+-- pm_user 独立用户体系(id从200000起)；菜单与应用由 DataInitRunner.initPm 幂等播种，
+-- 演示数据(admin/owner01/pm01/mgr01/dev01/dev02/qa01, 密码123456)仅 pm_user 为空时播种
+-- ====================================================================
+CREATE TABLE IF NOT EXISTS `pm_dept` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `parent_id` bigint DEFAULT 0,
+  `dept_name` varchar(50) DEFAULT '',
+  `sort` int DEFAULT 0,
+  `leader` varchar(50) DEFAULT '',
+  `status` int DEFAULT 1,
+  `sys001` datetime DEFAULT NULL,
+  `sys002` datetime DEFAULT NULL,
+  `sys003` bigint DEFAULT NULL,
+  `sys004` bigint DEFAULT NULL,
+  `sys005` int DEFAULT 1,
+  `sys006` varchar(64) DEFAULT '',
+  `sys007` varchar(64) DEFAULT '',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM部门';
+
+CREATE TABLE IF NOT EXISTS `pm_user` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `username` varchar(50) NOT NULL,
+  `password` varchar(100) NOT NULL,
+  `real_name` varchar(50) DEFAULT '',
+  `dept_id` bigint DEFAULT NULL,
+  `role` varchar(20) DEFAULT 'dev' COMMENT 'admin/owner/product/manager/dev/tester',
+  `email` varchar(50) DEFAULT '',
+  `phone` varchar(20) DEFAULT '',
+  `status` int DEFAULT 1,
+  `sys001` datetime DEFAULT NULL,
+  `sys002` datetime DEFAULT NULL,
+  `sys003` bigint DEFAULT NULL,
+  `sys004` bigint DEFAULT NULL,
+  `sys005` int DEFAULT 1,
+  `sys006` varchar(64) DEFAULT '',
+  `sys007` varchar(64) DEFAULT '',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_username` (`username`)
+) ENGINE=InnoDB AUTO_INCREMENT=200000 DEFAULT CHARSET=utf8mb4 COMMENT='PM用户(独立于sys_user)';
+
+CREATE TABLE IF NOT EXISTS `pm_program` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `name` varchar(100) NOT NULL,
+  `description` varchar(500) DEFAULT '',
+  `budget` decimal(14,2) DEFAULT 0,
+  `plan_desc` text,
+  `owner_id` bigint DEFAULT NULL,
+  `start_date` date DEFAULT NULL,
+  `end_date` date DEFAULT NULL,
+  `status` int DEFAULT 1 COMMENT '1进行中 0已关闭',
+  `sys001` datetime DEFAULT NULL,
+  `sys002` datetime DEFAULT NULL,
+  `sys003` bigint DEFAULT NULL,
+  `sys004` bigint DEFAULT NULL,
+  `sys005` int DEFAULT 1,
+  `sys006` varchar(64) DEFAULT '',
+  `sys007` varchar(64) DEFAULT '',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM项目集';
+
+CREATE TABLE IF NOT EXISTS `pm_stakeholder` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `program_id` bigint NOT NULL,
+  `name` varchar(50) DEFAULT '',
+  `stakeholder_role` varchar(50) DEFAULT '',
+  `contact` varchar(50) DEFAULT '',
+  `remark` varchar(200) DEFAULT '',
+  `sys001` datetime DEFAULT NULL,
+  `sys002` datetime DEFAULT NULL,
+  `sys003` bigint DEFAULT NULL,
+  `sys004` bigint DEFAULT NULL,
+  `sys005` int DEFAULT 1,
+  `sys006` varchar(64) DEFAULT '',
+  `sys007` varchar(64) DEFAULT '',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM项目集干系人';
+
+CREATE TABLE IF NOT EXISTS `pm_product` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `name` varchar(100) NOT NULL,
+  `program_id` bigint DEFAULT NULL,
+  `owner_id` bigint DEFAULT NULL,
+  `description` varchar(500) DEFAULT '',
+  `status` int DEFAULT 1,
+  `sys001` datetime DEFAULT NULL,
+  `sys002` datetime DEFAULT NULL,
+  `sys003` bigint DEFAULT NULL,
+  `sys004` bigint DEFAULT NULL,
+  `sys005` int DEFAULT 1,
+  `sys006` varchar(64) DEFAULT '',
+  `sys007` varchar(64) DEFAULT '',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM产品';
+
+CREATE TABLE IF NOT EXISTS `pm_module` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `product_id` bigint NOT NULL,
+  `name` varchar(100) DEFAULT '',
+  `parent_id` bigint DEFAULT 0,
+  `sort` int DEFAULT 0,
+  `sys001` datetime DEFAULT NULL,
+  `sys002` datetime DEFAULT NULL,
+  `sys003` bigint DEFAULT NULL,
+  `sys004` bigint DEFAULT NULL,
+  `sys005` int DEFAULT 1,
+  `sys006` varchar(64) DEFAULT '',
+  `sys007` varchar(64) DEFAULT '',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM产品模块';
+
+CREATE TABLE IF NOT EXISTS `pm_plan` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `product_id` bigint NOT NULL,
+  `title` varchar(100) DEFAULT '',
+  `description` varchar(500) DEFAULT '',
+  `start_date` date DEFAULT NULL,
+  `end_date` date DEFAULT NULL,
+  `status` int DEFAULT 1 COMMENT '1未开始 2进行中 3已完成',
+  `sys001` datetime DEFAULT NULL,
+  `sys002` datetime DEFAULT NULL,
+  `sys003` bigint DEFAULT NULL,
+  `sys004` bigint DEFAULT NULL,
+  `sys005` int DEFAULT 1,
+  `sys006` varchar(64) DEFAULT '',
+  `sys007` varchar(64) DEFAULT '',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM产品计划';
+
+CREATE TABLE IF NOT EXISTS `pm_story` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `product_id` bigint NOT NULL,
+  `module_id` bigint DEFAULT NULL,
+  `plan_id` bigint DEFAULT NULL,
+  `title` varchar(200) NOT NULL,
+  `description` text,
+  `priority` int DEFAULT 3 COMMENT '1低2中3高4最高',
+  `status` varchar(20) DEFAULT 'draft' COMMENT 'draft/active/closed',
+  `closed_reason` varchar(200) DEFAULT '',
+  `sys001` datetime DEFAULT NULL,
+  `sys002` datetime DEFAULT NULL,
+  `sys003` bigint DEFAULT NULL,
+  `sys004` bigint DEFAULT NULL,
+  `sys005` int DEFAULT 1,
+  `sys006` varchar(64) DEFAULT '',
+  `sys007` varchar(64) DEFAULT '',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM需求';
+
+CREATE TABLE IF NOT EXISTS `pm_release` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `product_id` bigint NOT NULL,
+  `name` varchar(100) DEFAULT '',
+  `description` varchar(500) DEFAULT '',
+  `status` int DEFAULT 0 COMMENT '0未发布 1已发布',
+  `sys001` datetime DEFAULT NULL,
+  `sys002` datetime DEFAULT NULL,
+  `sys003` bigint DEFAULT NULL,
+  `sys004` bigint DEFAULT NULL,
+  `sys005` int DEFAULT 1,
+  `sys006` varchar(64) DEFAULT '',
+  `sys007` varchar(64) DEFAULT '',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM产品发布';
+
+CREATE TABLE IF NOT EXISTS `pm_project` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `name` varchar(100) NOT NULL,
+  `program_id` bigint DEFAULT NULL,
+  `manager_id` bigint DEFAULT NULL,
+  `description` varchar(500) DEFAULT '',
+  `budget` decimal(14,2) DEFAULT 0,
+  `start_date` date DEFAULT NULL,
+  `end_date` date DEFAULT NULL,
+  `status` int DEFAULT 1 COMMENT '1进行中 0已结束',
+  `phase` varchar(20) DEFAULT 'research' COMMENT 'research调研/requirement需求整理/develop研发/online上线/ops运维/archive归档',
+  `sys001` datetime DEFAULT NULL,
+  `sys002` datetime DEFAULT NULL,
+  `sys003` bigint DEFAULT NULL,
+  `sys004` bigint DEFAULT NULL,
+  `sys005` int DEFAULT 1,
+  `sys006` varchar(64) DEFAULT '',
+  `sys007` varchar(64) DEFAULT '',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM项目';
+
+CREATE TABLE IF NOT EXISTS `pm_project_product` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `project_id` bigint NOT NULL,
+  `product_id` bigint NOT NULL,
+  `sys001` datetime DEFAULT NULL,
+  `sys002` datetime DEFAULT NULL,
+  `sys003` bigint DEFAULT NULL,
+  `sys004` bigint DEFAULT NULL,
+  `sys005` int DEFAULT 1,
+  `sys006` varchar(64) DEFAULT '',
+  `sys007` varchar(64) DEFAULT '',
+  PRIMARY KEY (`id`),
+  KEY `idx_project_id` (`project_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM项目关联产品';
+
+CREATE TABLE IF NOT EXISTS `pm_project_story` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `project_id` bigint NOT NULL,
+  `story_id` bigint NOT NULL,
+  `sys001` datetime DEFAULT NULL,
+  `sys002` datetime DEFAULT NULL,
+  `sys003` bigint DEFAULT NULL,
+  `sys004` bigint DEFAULT NULL,
+  `sys005` int DEFAULT 1,
+  `sys006` varchar(64) DEFAULT '',
+  `sys007` varchar(64) DEFAULT '',
+  PRIMARY KEY (`id`),
+  KEY `idx_project_id` (`project_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM项目关联需求';
+
+CREATE TABLE IF NOT EXISTS `pm_team` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `project_id` bigint NOT NULL,
+  `user_id` bigint NOT NULL,
+  `role` varchar(20) DEFAULT '研发',
+  `sys001` datetime DEFAULT NULL,
+  `sys002` datetime DEFAULT NULL,
+  `sys003` bigint DEFAULT NULL,
+  `sys004` bigint DEFAULT NULL,
+  `sys005` int DEFAULT 1,
+  `sys006` varchar(64) DEFAULT '',
+  `sys007` varchar(64) DEFAULT '',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM项目团队';
+
+CREATE TABLE IF NOT EXISTS `pm_task` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `project_id` bigint NOT NULL,
+  `story_id` bigint DEFAULT NULL,
+  `name` varchar(200) NOT NULL,
+  `type` varchar(20) DEFAULT 'devel' COMMENT 'devel/test/design/docs',
+  `assigned_to` bigint DEFAULT NULL,
+  `status` varchar(20) DEFAULT 'wait' COMMENT 'wait/doing/done/closed',
+  `estimate_hours` decimal(6,1) DEFAULT 0,
+  `description` varchar(1000) DEFAULT '',
+  `opened_by` bigint DEFAULT NULL,
+  `finished_time` datetime DEFAULT NULL COMMENT '完成时间',
+  `sys001` datetime DEFAULT NULL,
+  `sys002` datetime DEFAULT NULL,
+  `sys003` bigint DEFAULT NULL,
+  `sys004` bigint DEFAULT NULL,
+  `sys005` int DEFAULT 1,
+  `sys006` varchar(64) DEFAULT '',
+  `sys007` varchar(64) DEFAULT '',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM任务';
+
+CREATE TABLE IF NOT EXISTS `pm_bug` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `product_id` bigint DEFAULT NULL,
+  `project_id` bigint DEFAULT NULL,
+  `title` varchar(200) NOT NULL,
+  `steps` text,
+  `severity` int DEFAULT 3 COMMENT '1致命2严重3一般4轻微',
+  `status` varchar(20) DEFAULT 'active' COMMENT 'active/resolved/closed',
+  `opened_by` bigint DEFAULT NULL,
+  `assigned_to` bigint DEFAULT NULL,
+  `resolved_by` bigint DEFAULT NULL,
+  `resolution` varchar(20) DEFAULT NULL,
+  `resolve_remark` varchar(500) DEFAULT '' COMMENT '解决说明',
+  `remark` varchar(500) DEFAULT '' COMMENT '转发/领取说明',
+  `sys001` datetime DEFAULT NULL,
+  `sys002` datetime DEFAULT NULL,
+  `sys003` bigint DEFAULT NULL,
+  `sys004` bigint DEFAULT NULL,
+  `sys005` int DEFAULT 1,
+  `sys006` varchar(64) DEFAULT '',
+  `sys007` varchar(64) DEFAULT '',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM缺陷';
+
+CREATE TABLE IF NOT EXISTS `pm_case` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `product_id` bigint NOT NULL,
+  `module_id` bigint DEFAULT NULL,
+  `title` varchar(200) NOT NULL,
+  `priority` int DEFAULT 3,
+  `steps` text,
+  `expected` text,
+  `last_result` varchar(20) DEFAULT 'none' COMMENT 'none/pass/fail/blocked',
+  `executed_by` bigint DEFAULT NULL,
+  `executed_time` datetime DEFAULT NULL,
+  `sys001` datetime DEFAULT NULL,
+  `sys002` datetime DEFAULT NULL,
+  `sys003` bigint DEFAULT NULL,
+  `sys004` bigint DEFAULT NULL,
+  `sys005` int DEFAULT 1,
+  `sys006` varchar(64) DEFAULT '',
+  `sys007` varchar(64) DEFAULT '',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM测试用例';
+
+CREATE TABLE IF NOT EXISTS `pm_commit` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `task_id` bigint DEFAULT NULL,
+  `user_id` bigint DEFAULT NULL,
+  `code_url` varchar(500) DEFAULT '',
+  `remark` varchar(500) DEFAULT '',
+  `commit_time` datetime DEFAULT NULL,
+  `sys001` datetime DEFAULT NULL,
+  `sys002` datetime DEFAULT NULL,
+  `sys003` bigint DEFAULT NULL,
+  `sys004` bigint DEFAULT NULL,
+  `sys005` int DEFAULT 1,
+  `sys006` varchar(64) DEFAULT '',
+  `sys007` varchar(64) DEFAULT '',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM代码提交';
+
+CREATE TABLE IF NOT EXISTS `pm_flow_def` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `code` varchar(50) NOT NULL COMMENT '流程编码',
+  `name` varchar(100) DEFAULT '',
+  `biz_type` varchar(20) DEFAULT 'story' COMMENT 'story/bug',
+  `description` varchar(500) DEFAULT '',
+  `status` int DEFAULT 1 COMMENT '1启用 0停用',
+  `sys001` datetime DEFAULT NULL,
+  `sys002` datetime DEFAULT NULL,
+  `sys003` bigint DEFAULT NULL,
+  `sys004` bigint DEFAULT NULL,
+  `sys005` int DEFAULT 1,
+  `sys006` varchar(64) DEFAULT '',
+  `sys007` varchar(64) DEFAULT '',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM流程定义';
+
+CREATE TABLE IF NOT EXISTS `pm_flow_node` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `def_id` bigint NOT NULL COMMENT '流程定义ID',
+  `node_key` varchar(50) NOT NULL COMMENT '节点标识',
+  `node_name` varchar(50) DEFAULT '',
+  `node_type` varchar(20) DEFAULT 'approval' COMMENT 'start/approval/task/end',
+  `sort` int DEFAULT 0,
+  `handler_role` varchar(20) DEFAULT '*' COMMENT 'admin/owner/product/manager/dev/tester/*',
+  `actions` varchar(100) DEFAULT 'approve,reject' COMMENT 'approve/reject/forward/complete',
+  `approve_to` varchar(50) DEFAULT NULL COMMENT '同意后节点key',
+  `reject_to` varchar(50) DEFAULT NULL COMMENT '拒绝后节点key(空=终止)',
+  `biz_status` varchar(20) DEFAULT NULL COMMENT '进入节点回写业务状态',
+  `sys001` datetime DEFAULT NULL,
+  `sys002` datetime DEFAULT NULL,
+  `sys003` bigint DEFAULT NULL,
+  `sys004` bigint DEFAULT NULL,
+  `sys005` int DEFAULT 1,
+  `sys006` varchar(64) DEFAULT '',
+  `sys007` varchar(64) DEFAULT '',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM流程节点';
+
+CREATE TABLE IF NOT EXISTS `pm_flow_instance` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `def_id` bigint NOT NULL COMMENT '流程定义ID',
+  `biz_type` varchar(20) DEFAULT 'story',
+  `biz_id` bigint NOT NULL COMMENT '业务ID',
+  `current_node` varchar(50) DEFAULT '',
+  `current_assignee` bigint DEFAULT NULL COMMENT '当前处理人(空=按角色)',
+  `status` varchar(20) DEFAULT 'running' COMMENT 'running/finished/terminated',
+  `created_by` bigint DEFAULT NULL,
+  `sys001` datetime DEFAULT NULL,
+  `sys002` datetime DEFAULT NULL,
+  `sys003` bigint DEFAULT NULL,
+  `sys004` bigint DEFAULT NULL,
+  `sys005` int DEFAULT 1,
+  `sys006` varchar(64) DEFAULT '',
+  `sys007` varchar(64) DEFAULT '',
+  PRIMARY KEY (`id`),
+  KEY `idx_biz` (`biz_type`, `biz_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM流程实例';
+
+CREATE TABLE IF NOT EXISTS `pm_flow_log` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `instance_id` bigint NOT NULL COMMENT '流程实例ID',
+  `from_node` varchar(50) DEFAULT '',
+  `action` varchar(20) DEFAULT '' COMMENT 'start/approve/reject/forward/complete',
+  `operator_id` bigint DEFAULT NULL,
+  `to_node` varchar(50) DEFAULT NULL,
+  `remark` varchar(200) DEFAULT '',
+  `sys001` datetime DEFAULT NULL,
+  `sys002` datetime DEFAULT NULL,
+  `sys003` bigint DEFAULT NULL,
+  `sys004` bigint DEFAULT NULL,
+  `sys005` int DEFAULT 1,
+  `sys006` varchar(64) DEFAULT '',
+  `sys007` varchar(64) DEFAULT '',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM流程操作日志';
+
+CREATE TABLE IF NOT EXISTS `pm_worklog` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `project_id` bigint NOT NULL,
+  `task_id` bigint DEFAULT NULL,
+  `story_id` bigint DEFAULT NULL,
+  `user_id` bigint NOT NULL,
+  `work_date` date DEFAULT NULL,
+  `hours` decimal(5,1) DEFAULT 0 COMMENT '工时(小时)',
+  `content` varchar(500) DEFAULT '',
+  `sys001` datetime DEFAULT NULL,
+  `sys002` datetime DEFAULT NULL,
+  `sys003` bigint DEFAULT NULL,
+  `sys004` bigint DEFAULT NULL,
+  `sys005` int DEFAULT 1,
+  `sys006` varchar(64) DEFAULT '',
+  `sys007` varchar(64) DEFAULT '',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM工时记录';
+
+CREATE TABLE IF NOT EXISTS `pm_file` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `project_id` bigint NOT NULL,
+  `file_name` varchar(200) DEFAULT '',
+  `file_url` varchar(500) DEFAULT '',
+  `file_category` varchar(20) DEFAULT 'other' COMMENT 'survey/requirement/design/develop/test/release/ops/other',
+  `remark` varchar(200) DEFAULT '',
+  `uploader_id` bigint DEFAULT NULL,
+  `sys001` datetime DEFAULT NULL,
+  `sys002` datetime DEFAULT NULL,
+  `sys003` bigint DEFAULT NULL,
+  `sys004` bigint DEFAULT NULL,
+  `sys005` int DEFAULT 1,
+  `sys006` varchar(64) DEFAULT '',
+  `sys007` varchar(64) DEFAULT '',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PM项目文件';

@@ -67,6 +67,34 @@ public class SysMailController {
         return R.ok(userMailDao.selectMyMails(userId));
     }
 
+    /** 我的待确认处罚通知邮件列表(登录后弹窗必读用) [{userMailId, mailId, title, content}] */
+    @GetMapping("/punish/pending")
+    public R<List<Map<String, Object>>> punishPending() {
+        Long userId = LoginService.getCurrentUserId();
+        if (userId == null) {
+            throw new BusinessException(GlobalErrorCode.UNAUTHORIZED);
+        }
+        return R.ok(userMailDao.selectPendingPunishMails(userId));
+    }
+
+    /** 确认处罚通知邮件：禁闭起算落库 + 标记邮件已领取(幂等) */
+    @PostMapping("/punish/confirm/{userMailId}")
+    public R<Void> punishConfirm(@PathVariable Long userMailId) {
+        Long userId = LoginService.getCurrentUserId();
+        if (userId == null) {
+            throw new BusinessException(GlobalErrorCode.UNAUTHORIZED);
+        }
+        BizUserMail um = userMailDao.selectOneById(userMailId);
+        if (um == null || !userId.equals(um.getUserId())) {
+            throw new BusinessException(GlobalErrorCode.DATA_NOT_FOUND);
+        }
+        // 触发禁闭起算(内部幂等：已起算不重复写)
+        reportService.onPunishMailViewed(userId, um.getMailId());
+        // 标记该邮件已领取(claimed=1+claim_time，幂等锁：仅未领取时生效)
+        userMailDao.markClaimed(userMailId, userId);
+        return R.ok("已确认处罚通知", null);
+    }
+
     /**
      * 查看/领取邮件(幂等，打开邮件详情时调用)
      * 若为举报处罚通知邮件，此刻开始计算禁闭天数

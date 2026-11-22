@@ -23,12 +23,13 @@ public interface BizLetterDao extends BaseDao<BizLetter> {
     long countSentToday(@Param("senderId") Long senderId, @Param("start") LocalDateTime start);
 
     /**
-     * 查询发件箱(带收件人昵称)；退回中的信件(status=4)在 return_time 到点前对寄件人不可见
+     * 查询发件箱(带收件人昵称)；退回中的信件(status=4)在 return_time 到点前对寄件人不可见；
+     * 寄件人已删除(del_sender=1)的信件不再展示
      */
     @Select("<script>" +
             "SELECT l.*, u.nickname AS receiver_name FROM biz_letter l " +
             "LEFT JOIN biz_user u ON l.receiver_id = u.id " +
-            "WHERE l.sys005 = 1 AND l.sender_id = #{senderId} AND l.status != 3 " +
+            "WHERE l.sys005 = 1 AND l.sender_id = #{senderId} AND l.status != 3 AND l.del_sender = 0 " +
             "AND (l.status != 4 OR (l.return_time IS NOT NULL AND l.return_time &lt;= NOW())) " +
             "<if test='status != null'>AND l.status = #{status} </if>" +
             "ORDER BY l.id DESC LIMIT #{limit} OFFSET #{offset}" +
@@ -38,13 +39,23 @@ public interface BizLetterDao extends BaseDao<BizLetter> {
                                    @Param("offset") int offset,
                                    @Param("limit") int limit);
 
+    /** 发件箱总数(与 selectSentList 查询条件完全一致，仅去掉分页) */
+    @Select("<script>" +
+            "SELECT COUNT(*) FROM biz_letter l " +
+            "WHERE l.sys005 = 1 AND l.sender_id = #{senderId} AND l.status != 3 AND l.del_sender = 0 " +
+            "AND (l.status != 4 OR (l.return_time IS NOT NULL AND l.return_time &lt;= NOW())) " +
+            "<if test='status != null'>AND l.status = #{status} </if>" +
+            "</script>")
+    long countSentList(@Param("senderId") Long senderId, @Param("status") Integer status);
+
     /**
-     * 查询收件箱(带发件人昵称，只显示已过到达时间的信件；已退回status=4的信不再展示给收件人)
+     * 查询收件箱(带发件人昵称，只显示已过到达时间的信件；已退回status=4的信不再展示给收件人；
+     * 收件人已删除(del_receiver=1)的信件不再展示)
      */
     @Select("<script>" +
             "SELECT l.*, u.nickname AS sender_name FROM biz_letter l " +
             "LEFT JOIN biz_user u ON l.sender_id = u.id " +
-            "WHERE l.sys005 = 1 AND l.receiver_id = #{receiverId} AND l.status NOT IN (3, 4) " +
+            "WHERE l.sys005 = 1 AND l.receiver_id = #{receiverId} AND l.status NOT IN (3, 4) AND l.del_receiver = 0 " +
             "AND (l.arrival_time IS NULL OR l.arrival_time &lt;= NOW()) " +
             "<if test='status != null'>AND l.status = #{status} </if>" +
             "ORDER BY (CASE WHEN l.status = 1 THEN 0 ELSE 1 END), l.id DESC LIMIT #{limit} OFFSET #{offset}" +
@@ -54,6 +65,15 @@ public interface BizLetterDao extends BaseDao<BizLetter> {
                                     @Param("offset") int offset,
                                     @Param("limit") int limit);
 
+    /** 收件箱总数(与 selectInboxList 查询条件完全一致，仅去掉分页) */
+    @Select("<script>" +
+            "SELECT COUNT(*) FROM biz_letter l " +
+            "WHERE l.sys005 = 1 AND l.receiver_id = #{receiverId} AND l.status NOT IN (3, 4) AND l.del_receiver = 0 " +
+            "AND (l.arrival_time IS NULL OR l.arrival_time &lt;= NOW()) " +
+            "<if test='status != null'>AND l.status = #{status} </if>" +
+            "</script>")
+    long countInboxList(@Param("receiverId") Long receiverId, @Param("status") Integer status);
+
     /**
      * 信箱全部：收到的(仅已到达)+寄出的，未读置前
      */
@@ -62,14 +82,14 @@ public interface BizLetterDao extends BaseDao<BizLetter> {
             "FROM biz_letter l " +
             "LEFT JOIN biz_user su ON l.sender_id = su.id " +
             "LEFT JOIN biz_user ru ON l.receiver_id = ru.id " +
-            "WHERE l.sys005 = 1 AND l.receiver_id = #{userId} AND l.status NOT IN (3, 4) " +
+            "WHERE l.sys005 = 1 AND l.receiver_id = #{userId} AND l.status NOT IN (3, 4) AND l.del_receiver = 0 " +
             "AND (l.arrival_time IS NULL OR l.arrival_time <= NOW()) " +
             "UNION ALL " +
             "SELECT l.*, su.nickname AS sender_name, ru.nickname AS receiver_name, 0 AS box_recv " +
             "FROM biz_letter l " +
             "LEFT JOIN biz_user su ON l.sender_id = su.id " +
             "LEFT JOIN biz_user ru ON l.receiver_id = ru.id " +
-            "WHERE l.sys005 = 1 AND l.sender_id = #{userId} AND l.status != 3 " +
+            "WHERE l.sys005 = 1 AND l.sender_id = #{userId} AND l.status != 3 AND l.del_sender = 0 " +
             "AND (l.status != 4 OR (l.return_time IS NOT NULL AND l.return_time <= NOW())) " +
             ") t " +
             "ORDER BY (CASE WHEN t.box_recv = 1 AND t.status = 1 THEN 0 ELSE 1 END), t.send_time DESC, t.id DESC " +
@@ -77,6 +97,18 @@ public interface BizLetterDao extends BaseDao<BizLetter> {
     List<BizLetter> selectBoxList(@Param("userId") Long userId,
                                   @Param("offset") int offset,
                                   @Param("limit") int limit);
+
+    /** 信箱全部总数(与 selectBoxList 两个分支条件完全一致，对 UNION ALL 整体计数，仅去掉分页) */
+    @Select("SELECT COUNT(*) FROM (" +
+            "SELECT l.id FROM biz_letter l " +
+            "WHERE l.sys005 = 1 AND l.receiver_id = #{userId} AND l.status NOT IN (3, 4) AND l.del_receiver = 0 " +
+            "AND (l.arrival_time IS NULL OR l.arrival_time <= NOW()) " +
+            "UNION ALL " +
+            "SELECT l.id FROM biz_letter l " +
+            "WHERE l.sys005 = 1 AND l.sender_id = #{userId} AND l.status != 3 AND l.del_sender = 0 " +
+            "AND (l.status != 4 OR (l.return_time IS NOT NULL AND l.return_time <= NOW())) " +
+            ") t")
+    long countBoxList(@Param("userId") Long userId);
 
     @Select("SELECT l.*, su.nickname AS sender_name, ru.nickname AS receiver_name, " +
             "s.name AS stamp_name, e.name AS envelope_name " +
@@ -105,7 +137,7 @@ public interface BizLetterDao extends BaseDao<BizLetter> {
     List<Map<String, Object>> selectRecentWriters(@Param("limit") int limit);
 
     /**
-     * 信件广场：设置公开的信件，最新 limit 条(游客可看)
+     * 信件广场：设置公开的信件(未读+已读均展示，仍排除已删除/退回，及冻结禁用账号发出的信)，最新 limit 条(游客可看)
      * 键为驼峰：id/title/content/sendTime/senderId/senderName/avatarUrl
      */
     @Select("SELECT l.id, l.title, l.content, l.send_time AS send_time, " +
@@ -114,7 +146,8 @@ public interface BizLetterDao extends BaseDao<BizLetter> {
             "FROM biz_letter l " +
             "LEFT JOIN biz_user su ON l.sender_id = su.id " +
             "LEFT JOIN biz_user_profile p ON p.user_id = su.id " +
-            "WHERE l.sys005 = 1 AND l.status = 1 AND l.is_public = 1 AND l.abnormal = 0 AND su.sys005 = 1 " +
+            "WHERE l.sys005 = 1 AND l.status IN (1, 2) AND l.is_public = 1 AND l.abnormal = 0 " +
+            "AND su.sys005 = 1 AND su.status = 1 " +
             "ORDER BY l.send_time DESC LIMIT #{limit}")
     List<Map<String, Object>> selectPublicLetters(@Param("limit") int limit);
 
@@ -123,7 +156,7 @@ public interface BizLetterDao extends BaseDao<BizLetter> {
      */
     @Select("SELECT u.id FROM biz_user u " +
             "WHERE u.sys005 = 1 AND u.status = 1 AND u.id != #{userId} " +
-            "AND u.id NOT IN (SELECT friend_id FROM biz_friend WHERE sys005 = 1 AND user_id = #{userId} AND status = 4) " +
+            "AND u.id NOT IN (SELECT user_id FROM biz_friend WHERE sys005 = 1 AND friend_id = #{userId} AND status = 4) " +
             "ORDER BY RAND() LIMIT 1")
     Long selectRandomReceiver(@Param("userId") Long userId);
 
@@ -172,7 +205,7 @@ public interface BizLetterDao extends BaseDao<BizLetter> {
 
     /**
      * 我与某位好友的来往信件(双向，各按自身可见性过滤，最新100封)
-     * 收到的：已到达且未退回；寄出的：未删除，退回中的需 return_time 到点
+     * 收到的：已到达且未退回(且我未删除)；寄出的：未删除(且我未删除)，退回中的需 return_time 到点
      */
     @Select("SELECT * FROM (" +
             "SELECT l.*, su.nickname AS sender_name, ru.nickname AS receiver_name, 1 AS box_recv " +
@@ -180,7 +213,7 @@ public interface BizLetterDao extends BaseDao<BizLetter> {
             "LEFT JOIN biz_user su ON l.sender_id = su.id " +
             "LEFT JOIN biz_user ru ON l.receiver_id = ru.id " +
             "WHERE l.sys005 = 1 AND l.sender_id = #{friendId} AND l.receiver_id = #{userId} " +
-            "AND l.status NOT IN (0, 3, 4) " +
+            "AND l.status NOT IN (0, 3, 4) AND l.del_receiver = 0 " +
             "AND (l.arrival_time IS NULL OR l.arrival_time <= NOW()) " +
             "UNION ALL " +
             "SELECT l.*, su.nickname AS sender_name, ru.nickname AS receiver_name, 0 AS box_recv " +
@@ -188,7 +221,7 @@ public interface BizLetterDao extends BaseDao<BizLetter> {
             "LEFT JOIN biz_user su ON l.sender_id = su.id " +
             "LEFT JOIN biz_user ru ON l.receiver_id = ru.id " +
             "WHERE l.sys005 = 1 AND l.sender_id = #{userId} AND l.receiver_id = #{friendId} " +
-            "AND l.status NOT IN (0, 3) " +
+            "AND l.status NOT IN (0, 3) AND l.del_sender = 0 " +
             "AND (l.status != 4 OR (l.return_time IS NOT NULL AND l.return_time <= NOW())) " +
             ") t ORDER BY t.send_time DESC, t.id DESC LIMIT 100")
     List<BizLetter> selectHistory(@Param("userId") Long userId, @Param("friendId") Long friendId);

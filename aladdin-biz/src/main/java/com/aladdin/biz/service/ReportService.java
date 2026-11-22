@@ -1,5 +1,6 @@
 package com.aladdin.biz.service;
 
+import com.aladdin.biz.dao.BizDiaryDao;
 import com.aladdin.biz.dao.BizLetterDao;
 import com.aladdin.biz.dao.BizMedalDao;
 import com.aladdin.biz.dao.BizReportDao;
@@ -8,6 +9,7 @@ import com.aladdin.biz.dao.BizSysMailDao;
 import com.aladdin.biz.dao.BizUserDao;
 import com.aladdin.biz.dao.BizUserMailDao;
 import com.aladdin.biz.dao.BizUserMedalDao;
+import com.aladdin.biz.entity.BizDiary;
 import com.aladdin.biz.entity.BizLetter;
 import com.aladdin.biz.entity.BizMedal;
 import com.aladdin.biz.entity.BizReport;
@@ -49,6 +51,9 @@ public class ReportService {
     private BizLetterDao letterDao;
 
     @Autowired
+    private BizDiaryDao diaryDao;
+
+    @Autowired
     private BizUserDao userDao;
 
     @Autowired
@@ -76,17 +81,8 @@ public class ReportService {
      */
     @Transactional(rollbackFor = Exception.class)
     public BizReport submit(Long userId, Long letterId, String category, String description) {
-        if (category == null || !CATEGORIES.contains(category.trim())) {
-            throw new BusinessException(GlobalErrorCode.BAD_REQUEST, "请选择正确的举报类型");
-        }
-        category = category.trim();
-        String desc = description == null ? "" : description.trim();
-        if (desc.length() > 500) {
-            throw new BusinessException(GlobalErrorCode.BAD_REQUEST, "说明内容不能超过500字");
-        }
-        if ("其他".equals(category) && desc.isEmpty()) {
-            throw new BusinessException(GlobalErrorCode.BAD_REQUEST, "选择\"其他\"时请填写补充说明");
-        }
+        // 校验举报类型与说明(信件/日记通用规则)
+        String desc = checkCategoryAndDescription(category, description);
         if (letterId == null) {
             throw new BusinessException(GlobalErrorCode.BAD_REQUEST, "缺少被举报信件");
         }
@@ -106,15 +102,80 @@ public class ReportService {
         if (Integer.valueOf(4).equals(letter.getStatus())) {
             throw new BusinessException(GlobalErrorCode.BAD_REQUEST, "该信件已退回寄件人，无需举报");
         }
-        if (reportDao.countByLetterAndReporter(letterId, userId) > 0) {
+        if (reportDao.countByTargetAndReporter(TARGET_LETTER, letterId, userId) > 0) {
             throw new BusinessException(GlobalErrorCode.BAD_REQUEST, "该信件您已举报过，请等待处理结果");
         }
+        return insertReport(userId, letterId, TARGET_LETTER, letter.getSenderId(), category, desc);
+    }
+
+    /**
+     * 用户举报日记(仅公开日记，且不能举报自己的日记)
+     *
+     * @param userId      举报人ID
+     * @param diaryId     被举报日记ID
+     * @param category    举报类型(白名单)
+     * @param description 补充说明(选"其他"时必填)
+     * @return 举报单
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public BizReport submitDiary(Long userId, Long diaryId, String category, String description) {
+        // 校验举报类型与说明(信件/日记通用规则)
+        String desc = checkCategoryAndDescription(category, description);
+        if (diaryId == null) {
+            throw new BusinessException(GlobalErrorCode.BAD_REQUEST, "缺少被举报日记");
+        }
+        BizDiary diary = diaryDao.selectOneById(diaryId);
+        if (diary == null || !Integer.valueOf(1).equals(diary.getSys005())) {
+            throw new BusinessException(GlobalErrorCode.DATA_NOT_FOUND);
+        }
+        // 仅公开日记可被举报
+        if (!Integer.valueOf(1).equals(diary.getIsPublic())) {
+            throw new BusinessException(GlobalErrorCode.BAD_REQUEST, "仅公开日记可以举报");
+        }
+        // 举报者不能是作者本人
+        if (diary.getUserId() == null || userId.equals(diary.getUserId())) {
+            throw new BusinessException(GlobalErrorCode.BAD_REQUEST, "不能举报自己的日记");
+        }
+        if (reportDao.countByTargetAndReporter(TARGET_DIARY, diaryId, userId) > 0) {
+            throw new BusinessException(GlobalErrorCode.BAD_REQUEST, "该日记您已举报过，请等待处理结果");
+        }
+        return insertReport(userId, diaryId, TARGET_DIARY, diary.getUserId(), category, desc);
+    }
+
+    /** 举报目标类型：信件 */
+    public static final String TARGET_LETTER = "letter";
+    /** 举报目标类型：日记 */
+    public static final String TARGET_DIARY = "diary";
+
+    /**
+     * 校验举报类型白名单与说明长度(信件/日记通用)
+     *
+     * @return trim后的说明文本
+     */
+    private String checkCategoryAndDescription(String category, String description) {
+        if (category == null || !CATEGORIES.contains(category.trim())) {
+            throw new BusinessException(GlobalErrorCode.BAD_REQUEST, "请选择正确的举报类型");
+        }
+        String desc = description == null ? "" : description.trim();
+        if (desc.length() > 500) {
+            throw new BusinessException(GlobalErrorCode.BAD_REQUEST, "说明内容不能超过500字");
+        }
+        if ("其他".equals(category.trim()) && desc.isEmpty()) {
+            throw new BusinessException(GlobalErrorCode.BAD_REQUEST, "选择\"其他\"时请填写补充说明");
+        }
+        return desc;
+    }
+
+    /** 落库通用字段组装(targetType=letter/diary，targetId复用letter_id列) */
+    private BizReport insertReport(Long reporterId, Long targetId, String targetType,
+                                   Long reportedId, String category, String desc) {
         LocalDateTime now = LocalDateTime.now();
         BizReport report = new BizReport();
-        report.setLetterId(letterId);
-        report.setReporterId(userId);
-        report.setReportedId(letter.getSenderId());
-        report.setCategory(category);
+        report.setLetterId(targetId);
+        report.setTargetType(targetType);
+        report.setReporterId(reporterId);
+        report.setReportedId(reportedId);
+        report.setCategory(category.trim());
         report.setDescription(desc);
         report.setStatus(0);
         report.setRewardCoins(0);
@@ -182,7 +243,7 @@ public class ReportService {
         LocalDateTime now = LocalDateTime.now();
 
         // ===== 1. 举报者回复邮件(铜钱/邮票随信附赠，领取时自动发放) =====
-        StringBuilder c1 = new StringBuilder("您举报的信件已核实处理，感谢您对纸船信箱的守护！");
+        StringBuilder c1 = new StringBuilder("您举报的内容已核实处理，感谢您对纸船信箱的守护！");
         if (!reply1.isEmpty()) {
             c1.append("\n管理员回复：").append(reply1);
         }
@@ -236,11 +297,20 @@ public class ReportService {
             userDao.resetConfine(report.getReportedId(), confineDays);
         }
 
-        // ===== 5. 被举报信件标记异常(不再上信件广场) =====
-        BizLetter letterUpdate = new BizLetter();
-        letterUpdate.setId(report.getLetterId());
-        letterUpdate.setAbnormal(1);
-        letterDao.update(letterUpdate);
+        // ===== 5. 被举报目标标记异常(日记置abnormal，信件置abnormal，均不再上广场) =====
+        if (TARGET_DIARY.equals(report.getTargetType())) {
+            // 日记举报：标记日记异常
+            BizDiary diaryUpdate = new BizDiary();
+            diaryUpdate.setId(report.getLetterId());
+            diaryUpdate.setAbnormal(1);
+            diaryDao.update(diaryUpdate);
+        } else {
+            // 信件举报(含历史数据)：标记信件异常
+            BizLetter letterUpdate = new BizLetter();
+            letterUpdate.setId(report.getLetterId());
+            letterUpdate.setAbnormal(1);
+            letterDao.update(letterUpdate);
+        }
 
         // ===== 6. 回填举报单 =====
         BizReport update = new BizReport();

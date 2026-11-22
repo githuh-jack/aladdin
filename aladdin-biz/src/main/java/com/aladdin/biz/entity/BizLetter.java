@@ -37,6 +37,10 @@ public class BizLetter extends BaseEntity {
     private Integer isPublic;
     /** 0正常 1异常(后台标记，异常不上广场) */
     private Integer abnormal;
+    /** 寄件人已删除(按方删除标志：0未删 1已删，仅影响寄件人侧可见性，不影响对方) */
+    private Integer delSender;
+    /** 收件人已删除(按方删除标志：0未删 1已删，仅影响收件人侧可见性，不影响对方) */
+    private Integer delReceiver;
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
     private LocalDateTime sendTime;

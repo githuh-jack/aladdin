@@ -42,4 +42,14 @@ public interface BizUserMailDao extends BaseDao<BizUserMail> {
     @Update("UPDATE biz_user_mail SET claimed = 1, claim_time = NOW() " +
             "WHERE sys005 = 1 AND id = #{id} AND user_id = #{userId} AND claimed = 0")
     int markClaimed(@Param("id") Long id, @Param("userId") Long userId);
+
+    /** 我的待确认处罚通知邮件(claimed=0 且关联举报单禁闭未起算) */
+    @Select("SELECT um.id AS userMailId, um.mail_id AS mailId, m.title, m.content " +
+            "FROM biz_user_mail um " +
+            "INNER JOIN biz_sys_mail m ON um.mail_id = m.id AND m.sys005 = 1 " +
+            "INNER JOIN biz_report r ON r.reported_mail_id = um.mail_id AND r.sys005 = 1 " +
+            "WHERE um.sys005 = 1 AND um.user_id = #{userId} AND um.claimed = 0 " +
+            "AND r.confine_days > 0 AND r.confine_started = 0 " +
+            "ORDER BY um.id DESC")
+    List<Map<String, Object>> selectPendingPunishMails(@Param("userId") Long userId);
 }

@@ -83,7 +83,13 @@ public class LetterController {
         boolean receiverNotFound = false;
         Object receiverNoObj = body.get("receiverNo");
         if (receiverNoObj != null && !"".equals(receiverNoObj)) {
-            BizUser receiver = userDao.selectByUserNo(Long.valueOf(receiverNoObj.toString().trim()));
+            long userNo;
+            try {
+                userNo = Long.valueOf(receiverNoObj.toString().trim());
+            } catch (NumberFormatException e) {
+                throw new BusinessException(GlobalErrorCode.BAD_REQUEST, "收件编号格式不正确");
+            }
+            BizUser receiver = userDao.selectByUserNo(userNo);
             if (receiver == null) {
                 receiverNotFound = true;
                 letter.setReceiverAddress("编号" + receiverNoObj.toString().trim());
@@ -132,6 +138,18 @@ public class LetterController {
                 }
                 letter.setReceiverId(randomReceiver);
             }
+            // 单发收件人有效性校验：收件人不存在或已冻结/禁用时，信件照常寄出并消耗邮票，
+            // 到达后按"未找到指定的用户"退回寄件人(体现真实邮寄"查无此人退回"语义，不中止发送)；
+            // receiverId 置空并改写收件地址，避免详情页按收件人泄漏
+            boolean receiverInvalid = false;
+            if (letter.getReceiverId() != null && !receiverNotFound) {
+                BizUser receiverUser = userDao.selectOneById(letter.getReceiverId());
+                if (receiverUser == null || !Integer.valueOf(1).equals(receiverUser.getStatus())) {
+                    receiverInvalid = true;
+                    letter.setReceiverId(null);
+                    letter.setReceiverAddress("用户不存在或已注销");
+                }
+            }
             // 发送时收件人与收件地址至少一个
             boolean hasReceiver = letter.getReceiverId() != null;
             boolean hasAddress = letter.getReceiverAddress() != null && !letter.getReceiverAddress().isEmpty();
@@ -155,8 +173,8 @@ public class LetterController {
             int deliveryDays = stamp.getDeliveryDays() == null || stamp.getDeliveryDays() <= 0
                     ? 3 : stamp.getDeliveryDays();
             letter.setArrivalTime(letter.getSendTime().plusDays(deliveryDays));
-            // 收件编号不存在：到达后立即按"未找到指定的用户"退回(退回时间=到达时间)
-            if (receiverNotFound) {
+            // 收件编号不存在或收件人无效：到达后立即按"未找到指定的用户"退回(退回时间=到达时间)
+            if (receiverNotFound || receiverInvalid) {
                 letter.setReturnReason("未找到指定的用户");
                 letter.setReturnTime(letter.getArrivalTime());
             }
@@ -169,6 +187,10 @@ public class LetterController {
                 letter.setSys001(LocalDateTime.now());
                 letter.setSys005(1);
                 letter.setSys006("biz");
+                // 模板基线：首封信若为退回信会改写模板字段，插入后需还原，避免污染后续群发副本
+                String baseAddress = letter.getReceiverAddress();
+                String baseReturnReason = letter.getReturnReason();
+                LocalDateTime baseReturnTime = letter.getReturnTime();
                 boolean first = true;
                 for (Long rid : multiReceiverIds) {
                     if (rid.equals(userId)) {
@@ -179,10 +201,27 @@ public class LetterController {
                     }
                     BizLetter target = first ? letter : copyLetter(letter);
                     target.setReceiverId(rid);
+                    // 校验收件人有效：不存在或冻结/禁用时，该封信照常寄出并消耗邮票，
+                    // 到达后按"查无此人"退回(receiverId 置空并改写收件地址，避免详情页按收件人泄漏)
+                    BizUser receiverUser = userDao.selectOneById(rid);
+                    boolean ridInvalid = receiverUser == null
+                            || !Integer.valueOf(1).equals(receiverUser.getStatus());
+                    if (ridInvalid) {
+                        target.setReceiverId(null);
+                        target.setReceiverAddress("用户不存在或已注销");
+                        target.setReturnReason("未找到指定的用户");
+                        target.setReturnTime(target.getArrivalTime());
+                    }
                     letterDao.insert(target);
                     // 每封信各自消耗一枚邮票(及信纸)，不足则整体回滚
                     consumeLetterAssets(userId, target);
                     rewardService.onLetterSent(userId, target.getId(), target.getContent());
+                    if (first && ridInvalid) {
+                        // 还原模板基线(receiverId 每封都会覆盖，无需还原)
+                        letter.setReceiverAddress(baseAddress);
+                        letter.setReturnReason(baseReturnReason);
+                        letter.setReturnTime(baseReturnTime);
+                    }
                     first = false;
                 }
                 return R.ok(letter);
@@ -272,8 +311,9 @@ public class LetterController {
         }
         List<BizLetter> list = letterDao.selectSentList(userId, status,
                 pageQuery.getOffset(), pageQuery.getLimit());
-        // 简化：不查总数，前端按 list 长度处理；MVP 足够
-        return R.ok(new PageResult<>(pageQuery.getPage(), pageQuery.getLimit(), list.size(), list));
+        // 真实总数：与列表查询同条件的 COUNT(*)，保证分页准确
+        long total = letterDao.countSentList(userId, status);
+        return R.ok(new PageResult<>(pageQuery.getPage(), pageQuery.getLimit(), total, list));
     }
 
     /**
@@ -288,14 +328,18 @@ public class LetterController {
             throw new BusinessException(GlobalErrorCode.UNAUTHORIZED);
         }
         List<BizLetter> list;
+        long total;
         if ("inbox".equals(box)) {
             list = letterDao.selectInboxList(userId, null, pageQuery.getOffset(), pageQuery.getLimit());
+            total = letterDao.countInboxList(userId, null);
         } else if ("sent".equals(box)) {
             list = letterDao.selectSentList(userId, null, pageQuery.getOffset(), pageQuery.getLimit());
+            total = letterDao.countSentList(userId, null);
         } else {
             list = letterDao.selectBoxList(userId, pageQuery.getOffset(), pageQuery.getLimit());
+            total = letterDao.countBoxList(userId);
         }
-        return R.ok(new PageResult<>(pageQuery.getPage(), pageQuery.getLimit(), list.size(), list));
+        return R.ok(new PageResult<>(pageQuery.getPage(), pageQuery.getLimit(), total, list));
     }
 
     /** 收件箱 */
@@ -308,7 +352,9 @@ public class LetterController {
         }
         List<BizLetter> list = letterDao.selectInboxList(userId, status,
                 pageQuery.getOffset(), pageQuery.getLimit());
-        return R.ok(new PageResult<>(pageQuery.getPage(), pageQuery.getLimit(), list.size(), list));
+        // 真实总数：与列表查询同条件的 COUNT(*)，保证分页准确
+        long total = letterDao.countInboxList(userId, status);
+        return R.ok(new PageResult<>(pageQuery.getPage(), pageQuery.getLimit(), total, list));
     }
 
     /**
@@ -344,6 +390,11 @@ public class LetterController {
         if (!isSender && !isReceiver) {
             throw new BusinessException(GlobalErrorCode.FORBIDDEN);
         }
+        // 按方删除：当前用户已删除该信(对应 del 标志=1)时对其不可见，语义等同已删除
+        if ((isSender && Integer.valueOf(1).equals(letter.getDelSender()))
+                || (isReceiver && Integer.valueOf(1).equals(letter.getDelReceiver()))) {
+            throw new BusinessException(GlobalErrorCode.DATA_NOT_FOUND);
+        }
         // 信件尚未到达：收件人不可提前查看(发件人可看自己在途的信)
         if (isReceiver && !isSender && letter.getArrivalTime() != null
                 && letter.getArrivalTime().isAfter(LocalDateTime.now())) {
@@ -362,7 +413,7 @@ public class LetterController {
         return R.ok(letter);
     }
 
-    /** 删除(逻辑删除:置status=3) */
+    /** 删除(按方删除：寄件人/收件人各置自己的删除标志，不影响对方可见性) */
     @PostMapping("/remove/{id}")
     public R<Void> remove(@PathVariable Long id) {
         Long userId = LoginService.getCurrentUserId();
@@ -373,11 +424,21 @@ public class LetterController {
         if (letter == null) {
             throw new BusinessException(GlobalErrorCode.DATA_NOT_FOUND);
         }
-        if (!userId.equals(letter.getSenderId()) && !userId.equals(letter.getReceiverId())) {
+        boolean isSender = userId.equals(letter.getSenderId());
+        boolean isReceiver = userId.equals(letter.getReceiverId());
+        if (!isSender && !isReceiver) {
             throw new BusinessException(GlobalErrorCode.FORBIDDEN);
         }
-        letter.setStatus(3);
-        letterDao.update(letter);
+        // 按方删除：只置当前用户侧的删除标志(status=3 不再使用，仅保留兼容历史数据)
+        BizLetter update = new BizLetter();
+        update.setId(id);
+        if (isSender) {
+            update.setDelSender(1);
+        }
+        if (isReceiver) {
+            update.setDelReceiver(1);
+        }
+        letterDao.update(update);
         return R.ok();
     }
 

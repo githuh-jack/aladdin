@@ -1,7 +1,9 @@
 package com.aladdin.biz.controller;
 
 import com.aladdin.biz.dao.BizFriendDao;
+import com.aladdin.biz.dao.BizUserDao;
 import com.aladdin.biz.entity.BizFriend;
+import com.aladdin.biz.entity.BizUser;
 import com.aladdin.common.core.domain.R;
 import com.aladdin.common.core.exception.BusinessException;
 import com.aladdin.common.core.exception.GlobalErrorCode;
@@ -26,6 +28,9 @@ public class FriendController {
 
     @Autowired
     private BizFriendDao friendDao;
+
+    @Autowired
+    private BizUserDao userDao;
 
     /** 我的好友列表 */
     @GetMapping("/list")
@@ -87,6 +92,14 @@ public class FriendController {
         if (friendId.equals(userId)) {
             throw new BusinessException(GlobalErrorCode.BAD_REQUEST, "不能添加自己为好友");
         }
+        // 校验目标用户存在且状态正常
+        BizUser target = userDao.selectOneById(friendId);
+        if (target == null) {
+            throw new BusinessException(GlobalErrorCode.BAD_REQUEST, "未找到该用户，请核对编号");
+        }
+        if (!Integer.valueOf(1).equals(target.getStatus())) {
+            throw new BusinessException(GlobalErrorCode.BAD_REQUEST, "该用户账号异常，暂时无法添加");
+        }
         // 检查是否已经是好友
         BizFriend existing = friendDao.selectFriendRelation(userId, friendId);
         if (existing != null) {
@@ -99,11 +112,15 @@ public class FriendController {
         if (friendDao.selectBlackRelation(friendId, userId) != null) {
             throw new BusinessException(GlobalErrorCode.FORBIDDEN, "无法添加该用户");
         }
+        String remark = body.getOrDefault("remark", "") == null ? "" : body.getOrDefault("remark", "").toString().trim();
+        if (remark.length() > 200) {
+            throw new BusinessException(GlobalErrorCode.BAD_REQUEST, "申请留言最多200字");
+        }
         BizFriend friend = new BizFriend();
         friend.setUserId(userId);
         friend.setFriendId(friendId);
         friend.setStatus(0);
-        friend.setApplyRemark((String) body.getOrDefault("remark", ""));
+        friend.setApplyRemark(remark);
         friend.setSys001(LocalDateTime.now());
         friend.setSys005(1);
         friend.setSys006("biz");
@@ -122,11 +139,19 @@ public class FriendController {
         if (friend == null) {
             throw new BusinessException(GlobalErrorCode.DATA_NOT_FOUND);
         }
+        // 幂等校验：仅"申请中"状态可处理，防止重复通过/拒绝
+        if (!Integer.valueOf(0).equals(friend.getStatus())) {
+            throw new BusinessException(GlobalErrorCode.BAD_REQUEST, "该申请已处理过");
+        }
         // 只有被加方可以处理
         if (!friend.getFriendId().equals(userId)) {
             throw new BusinessException(GlobalErrorCode.FORBIDDEN);
         }
         Integer action = Integer.valueOf(body.get("action").toString());
+        // 仅允许 1通过 2拒绝
+        if (!Integer.valueOf(1).equals(action) && !Integer.valueOf(2).equals(action)) {
+            throw new BusinessException(GlobalErrorCode.BAD_REQUEST, "action仅支持1(通过)或2(拒绝)");
+        }
         // 1通过 2拒绝
         friend.setStatus(action);
         if (action == 1) {
